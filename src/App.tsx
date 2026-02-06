@@ -10,6 +10,7 @@ import SalesModule from './components/modules/SalesModule';
 import QuotesModule from './components/modules/QuotesModule';
 import ConfigModule from './components/modules/ConfigModule';
 import MarketingModule from './components/modules/MarketingModule';
+import { EcommerceDashboard } from './pages/EcommerceDashboard';
 
 interface CurrentUser {
   id: string;
@@ -21,7 +22,18 @@ interface CurrentUser {
 }
 
 function App() {
-  const [currentModule, setCurrentModule] = useState<'dashboard' | 'crm' | 'inventory' | 'sales' | 'config' | 'kanban' | 'marketing' | 'quotes'>('dashboard');
+  const [currentModule, setCurrentModule] = useState<'dashboard' | 'crm' | 'inventory' | 'sales' | 'config' | 'kanban' | 'marketing' | 'quotes' | 'ecommerce'>(() => {
+    const path = window.location.pathname;
+    if (path.includes('/ecommerce')) return 'ecommerce';
+
+    const params = new URLSearchParams(window.location.search);
+    const moduleParam = params.get('module');
+    if (moduleParam && ['dashboard', 'crm', 'inventory', 'sales', 'config', 'kanban', 'marketing', 'quotes', 'ecommerce'].includes(moduleParam)) {
+      return moduleParam as any;
+    }
+
+    return 'dashboard';
+  });
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
@@ -78,6 +90,7 @@ function App() {
         {currentModule === 'sales' && <SalesModule currentUser={currentUser} />}
         {currentModule === 'quotes' && <QuotesModule currentUser={currentUser} />}
         {currentModule === 'marketing' && <MarketingModule currentUser={currentUser} />}
+        {currentModule === 'ecommerce' && <EcommerceDashboard />}
         {currentModule === 'config' && <ConfigModule currentUser={currentUser} />}
       </Layout>
     </>

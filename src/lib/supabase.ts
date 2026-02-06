@@ -42,18 +42,51 @@ export type Product = {
   id: string;
   sku: string;
   name: string;
-  description: string | null;
+  description: string | null; // Keep for backward compatibility or short desc
+  short_description: string | null;
+  detailed_description: string | null;
+  slug: string | null;
+
   material: string;
-  category: string | null;
-  image_url: string | null;
+  category: string | null; // Primary category
+  image_url: string | null; // Primary image
+
   retail_price: number;
   wholesale_price: number;
+  sale_price: number | null;
+  is_on_sale: boolean;
+  sale_start_date: string | null;
+  sale_end_date: string | null;
+
   stock_a: number;
   stock_b: number;
   stock_c: number;
   total_stock: number;
   min_stock_alert: number;
+
   is_base_line: boolean;
+  is_published_online: boolean;
+
+  // Specs & Shipping
+  weight: number | null;
+  width: number | null;
+  height: number | null;
+  length: number | null;
+
+  // SEO
+  meta_title: string | null;
+  meta_description: string | null;
+  keywords: string[] | null;
+
+  // Validation / Rules
+  min_order_quantity: number | null;
+  max_order_quantity: number | null;
+
+  // JSONB fields for flexibility
+  attributes: any; // e.g. { stone: "Diamond", karat: "18k" }
+  images: any;     // e.g. [{url: "...", alt: "..."}] (Gallery)
+  tags: string[];
+
   created_at: string;
   updated_at: string;
 };
@@ -206,6 +239,74 @@ export type CreditTransaction = {
   new_limit: number | null;
   reference: string | null;
   notes: string | null;
-  created_by: string | null;
   created_at: string;
 };
+
+export type Category = {
+  id: string;
+  name: string;
+  parent_id: string | null;
+  slug: string | null;
+  description: string | null;
+  image_url: string | null;
+  is_visible_in_menu: boolean;
+  sort_order: number;
+  created_at: string;
+};
+
+export const STORAGE_BUCKET = 'product-images';
+
+export async function uploadProductImage(file: File): Promise<string> {
+  const maxSize = 5 * 1024 * 1024;
+  if (file.size > maxSize) {
+    throw new Error('La imagen debe ser menor a 5MB');
+  }
+
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+  if (!allowedTypes.includes(file.type)) {
+    throw new Error('Formato no válido. Usa JPG, PNG, GIF o WEBP');
+  }
+
+  const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+  const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
+  const filePath = `products/${fileName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from(STORAGE_BUCKET)
+    .upload(filePath, file, {
+      cacheControl: '3600',
+      upsert: false
+    });
+
+  if (uploadError) {
+    console.error('Upload error:', uploadError);
+    throw new Error(`Error al subir imagen: ${uploadError.message}`);
+  }
+
+  const { data } = supabase.storage
+    .from(STORAGE_BUCKET)
+    .getPublicUrl(filePath);
+
+  return data.publicUrl;
+}
+
+export async function deleteProductImage(imageUrl: string): Promise<void> {
+  if (!imageUrl) return;
+
+  try {
+    const url = new URL(imageUrl);
+    const pathParts = url.pathname.split('/');
+    const bucketIndex = pathParts.findIndex(part => part === STORAGE_BUCKET);
+
+    if (bucketIndex !== -1 && pathParts.length > bucketIndex + 1) {
+      const filePath = pathParts.slice(bucketIndex + 1).join('/');
+      const { error } = await supabase.storage.from(STORAGE_BUCKET).remove([filePath]);
+
+      if (error) {
+        console.error('Delete error:', error);
+      }
+    }
+  } catch (error) {
+    console.error('Error parsing image URL:', error);
+  }
+}

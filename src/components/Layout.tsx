@@ -1,5 +1,4 @@
-import { ReactNode } from 'react';
-import { Users, Package, ShoppingCart, Settings, LayoutDashboard, Trello, Megaphone, FileText, LogOut, User } from 'lucide-react';
+import { Users, Package, ShoppingCart, Settings, LayoutDashboard, Trello, Megaphone, FileText, LogOut, User, Globe } from 'lucide-react';
 
 interface CurrentUser {
   id: string;
@@ -12,8 +11,8 @@ interface CurrentUser {
 
 type LayoutProps = {
   children: ReactNode;
-  currentModule: 'dashboard' | 'crm' | 'inventory' | 'sales' | 'config' | 'kanban' | 'marketing' | 'quotes';
-  onModuleChange: (module: 'dashboard' | 'crm' | 'inventory' | 'sales' | 'config' | 'kanban' | 'marketing' | 'quotes') => void;
+  currentModule: 'dashboard' | 'crm' | 'inventory' | 'sales' | 'config' | 'kanban' | 'marketing' | 'quotes' | 'ecommerce';
+  onModuleChange: (module: 'dashboard' | 'crm' | 'inventory' | 'sales' | 'config' | 'kanban' | 'marketing' | 'quotes' | 'ecommerce') => void;
   currentUser: CurrentUser;
   onLogout: () => void;
 };
@@ -26,6 +25,7 @@ export default function Layout({ children, currentModule, onModuleChange, curren
     { id: 'inventory' as const, name: 'Inventario', icon: Package },
     { id: 'sales' as const, name: 'Ventas', icon: ShoppingCart },
     { id: 'quotes' as const, name: 'Cotizaciones', icon: FileText },
+    { id: 'ecommerce' as const, name: 'E-commerce', icon: Globe },
     { id: 'marketing' as const, name: 'Marketing', icon: Megaphone },
     { id: 'config' as const, name: 'Configuración', icon: Settings },
   ];
@@ -71,11 +71,10 @@ export default function Layout({ children, currentModule, onModuleChange, curren
                   <button
                     key={module.id}
                     onClick={() => onModuleChange(module.id)}
-                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
-                      isActive
-                        ? 'bg-amber-50 text-amber-700'
-                        : 'text-gray-600 hover:bg-gray-100'
-                    }`}
+                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${isActive
+                      ? 'bg-amber-50 text-amber-700'
+                      : 'text-gray-600 hover:bg-gray-100'
+                      }`}
                   >
                     <Icon className="w-4 h-4" />
                     <span>{module.name}</span>
