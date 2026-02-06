@@ -1708,33 +1708,7 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
                     </div>
 
                     <form onSubmit={handleCreateOrder} className="mt-6 space-y-4">
-                      {saleMode === 'remote' && (
-                        <>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Método de Entrega
-                            </label>
-                            <select
-                              name="delivery_method"
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                            >
-                              <option value="pickup">Recolección en Centro Joyero</option>
-                              <option value="shipping">Envío a Domicilio</option>
-                            </select>
-                          </div>
 
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Dirección de Entrega (opcional)
-                            </label>
-                            <textarea
-                              name="delivery_address"
-                              rows={2}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                            />
-                          </div>
-                        </>
-                      )}
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1749,10 +1723,10 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
 
                       <button
                         type="submit"
-                        disabled={cart.length === 0 || (saleMode === 'remote' && !selectedCustomer)}
+                        disabled={cart.length === 0}
                         className="w-full px-4 py-3 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-semibold"
                       >
-                        {saleMode === 'pos' ? 'Procesar Venta' : 'Crear Cotización'} ${total.toLocaleString('es-MX')}
+                        Procesar Venta ${total.toLocaleString('es-MX')}
                       </button>
                     </form>
                   </>
