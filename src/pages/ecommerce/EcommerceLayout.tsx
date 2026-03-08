@@ -7,6 +7,7 @@ import { CategoryManager } from './CategoryManager';
 import { ProductWizard } from './ProductWizard';
 import { ProductList } from './ProductList';
 import { WebOrders } from './WebOrders';
+import { BankDetailsSettings } from './BankDetailsSettings';
 
 export function EcommerceLayout() {
     const [activeTab, setActiveTab] = useState(() => {
@@ -85,6 +86,8 @@ export function EcommerceLayout() {
 
             case 'orders':
                 return <WebOrders />;
+            case 'bank_details':
+                return <BankDetailsSettings />;
             default:
                 return <WebOrders />;
         }
@@ -129,6 +132,12 @@ export function EcommerceLayout() {
                         onClick={() => setActiveTab('orders')}
                         icon={<Package size={20} />}
                         label="Pedidos Web"
+                    />
+                    <NavButton
+                        active={activeTab === 'bank_details'}
+                        onClick={() => setActiveTab('bank_details')}
+                        icon={<Layers size={20} />}
+                        label="Cuentas Bancarias"
                     />
 
                 </div>

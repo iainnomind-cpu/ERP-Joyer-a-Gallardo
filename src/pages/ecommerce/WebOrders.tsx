@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase, Order } from '../../lib/supabase';
-import { ShoppingBag, Truck, Store, CheckCircle, Clock, XCircle, Search, Eye, Package } from 'lucide-react';
+import { ShoppingBag, Truck, Store, CheckCircle, Clock, XCircle, Search, Eye, Package, DollarSign } from 'lucide-react';
 
 export function WebOrders() {
     const [orders, setOrders] = useState<Order[]>([]);
@@ -175,12 +175,24 @@ export function WebOrders() {
                             </div>
 
                             <div className="flex gap-2">
-                                {selectedOrder.status === 'pending_payment' && (
+                                {selectedOrder.status === 'pending_payment' && selectedOrder.delivery_method === 'pickup' && (
                                     <button
                                         onClick={() => window.location.href = `/?module=sales&orderId=${selectedOrder.id}`}
                                         className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2 shadow-sm animate-pulse"
                                     >
                                         <Store size={18} /> Cobrar en Caja
+                                    </button>
+                                )}
+                                {selectedOrder.status === 'pending_payment' && selectedOrder.delivery_method === 'shipping' && (
+                                    <button
+                                        onClick={() => {
+                                            if (window.confirm('¿Confirmas que ya recibiste el pago de este pedido por transferencia?')) {
+                                                handleStatusUpdate(selectedOrder.id, 'paid');
+                                            }
+                                        }}
+                                        className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2 shadow-sm animate-pulse"
+                                    >
+                                        <DollarSign size={18} /> Confirmar Pago
                                     </button>
                                 )}
                                 {selectedOrder.status === 'paid' && (
