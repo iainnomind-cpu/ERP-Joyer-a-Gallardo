@@ -25,6 +25,7 @@ export type Customer = {
   id: string;
   phone: string;
   name: string;
+  email: string | null;
   source: string;
   material_preference: string;
   segment: string | null;

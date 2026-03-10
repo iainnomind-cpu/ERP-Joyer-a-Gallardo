@@ -204,32 +204,108 @@ export default function ConfigModule({ currentUser }: ConfigModuleProps) {
             if (rule.rule_key !== 'wholesale_threshold') return null;
 
             const isEditing = editingRule === rule.id;
-            const currentAmount = rule.rule_value.amount;
+            // Default structure if undefined or old format
+            const rv = {
+              condition_type: rule.rule_value?.condition_type || 'amount',
+              threshold: rule.rule_value?.threshold || rule.rule_value?.amount || 3000,
+              enable_extra_discount: rule.rule_value?.enable_extra_discount || false,
+              extra_discount_threshold: rule.rule_value?.extra_discount_threshold || 5000,
+              extra_discount_percentage: rule.rule_value?.extra_discount_percentage || 10
+            };
 
             return (
               <div key={rule.id} className="space-y-4">
                 <div>
                   {isEditing ? (
-                    <div className="space-y-3">
+                    <div className="space-y-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
+
+                      {/* Tipo de condición */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Monto en MXN
+                          Aplicar mayoreo por:
+                        </label>
+                        <select
+                          id={`cond-${rule.id}`}
+                          defaultValue={rv.condition_type}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
+                        >
+                          <option value="amount">Monto en pesos ($)</option>
+                          <option value="pieces">Número de Piezas</option>
+                        </select>
+                      </div>
+
+                      {/* Meta / Umbral */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Cantidad requerida para mayoreo
                         </label>
                         <input
                           type="number"
-                          id={`amount-${rule.id}`}
-                          defaultValue={currentAmount}
-                          min="0"
-                          step="100"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                          id={`thresh-${rule.id}`}
+                          defaultValue={rv.threshold}
+                          min="1"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
                         />
                       </div>
-                      <div className="flex space-x-2">
+
+                      <div className="border-t pt-4 mt-2">
+                        <div className="flex items-center mb-3">
+                          <input
+                            type="checkbox"
+                            id={`extra-disc-${rule.id}`}
+                            defaultChecked={rv.enable_extra_discount}
+                            className="w-4 h-4 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+                          />
+                          <label htmlFor={`extra-disc-${rule.id}`} className="ml-2 text-sm font-bold text-amber-900">
+                            Habilitar Descuento Extra Automático
+                          </label>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Al superar ($ o pzas)
+                            </label>
+                            <input
+                              type="number"
+                              id={`extra-thresh-${rule.id}`}
+                              defaultValue={rv.extra_discount_threshold}
+                              min="1"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              % de Descuento
+                            </label>
+                            <input
+                              type="number"
+                              id={`extra-pct-${rule.id}`}
+                              defaultValue={rv.extra_discount_percentage}
+                              min="1"
+                              max="100"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 text-sm"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex space-x-2 pt-2">
                         <button
                           onClick={() => {
-                            const input = document.getElementById(`amount-${rule.id}`) as HTMLInputElement;
-                            const newAmount = parseInt(input.value);
-                            handleUpdateRule(rule.id, { amount: newAmount, currency: 'MXN' });
+                            const cond = (document.getElementById(`cond-${rule.id}`) as HTMLSelectElement).value;
+                            const thresh = parseInt((document.getElementById(`thresh-${rule.id}`) as HTMLInputElement).value) || 0;
+                            const enableExtra = (document.getElementById(`extra-disc-${rule.id}`) as HTMLInputElement).checked;
+                            const extraThresh = parseInt((document.getElementById(`extra-thresh-${rule.id}`) as HTMLInputElement).value) || 0;
+                            const extraPct = parseInt((document.getElementById(`extra-pct-${rule.id}`) as HTMLInputElement).value) || 0;
+
+                            handleUpdateRule(rule.id, {
+                              condition_type: cond,
+                              threshold: thresh,
+                              enable_extra_discount: enableExtra,
+                              extra_discount_threshold: extraThresh,
+                              extra_discount_percentage: extraPct
+                            });
                           }}
                           className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
                         >
@@ -246,23 +322,35 @@ export default function ConfigModule({ currentUser }: ConfigModuleProps) {
                     </div>
                   ) : (
                     <div>
-                      <div className="flex items-baseline justify-between mb-3">
-                        <div>
-                          <span className="text-4xl font-bold text-amber-600">
-                            ${currentAmount.toLocaleString('es-MX')}
-                          </span>
-                          <span className="text-gray-600 ml-2">MXN</span>
+                      <div className="flex items-baseline justify-between mb-3 border border-amber-100 bg-amber-50 p-4 rounded-xl relative overflow-hidden">
+                        <div className="absolute right-0 top-0 w-24 h-24 bg-amber-200/50 rounded-bl-full -z-0"></div>
+                        <div className="relative z-10 w-full">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="text-xs font-bold text-amber-800 uppercase tracking-wide mb-1">Condición Actual</p>
+                              <span className="text-3xl font-bold text-amber-600">
+                                {rv.condition_type === 'amount' ? `$${rv.threshold.toLocaleString('es-MX')}` : `${rv.threshold} Piezas`}
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => setEditingRule(rule.id)}
+                              className="text-amber-600 hover:text-amber-800 bg-white p-2 rounded-full shadow-sm"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          {rv.enable_extra_discount && (
+                            <div className="mt-3 pt-3 border-t border-amber-200/60 flex items-center justify-between">
+                              <div>
+                                <p className="text-xs text-amber-900 line-clamp-1"><span className="font-bold">Descuento Extra:</span> {rv.extra_discount_percentage}% al superar {rv.condition_type === 'amount' ? `$${rv.extra_discount_threshold.toLocaleString()}` : `${rv.extra_discount_threshold} pzas`}</p>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <button
-                          onClick={() => setEditingRule(rule.id)}
-                          className="text-amber-600 hover:text-amber-800"
-                        >
-                          <Edit2 className="w-5 h-5" />
-                        </button>
                       </div>
                       <p className="text-sm text-gray-600">
-                        Cuando el total de un pedido supera este monto, se aplican automáticamente
-                        los precios de la lista de Mayoreo.
+                        Al alcanzar esta meta se aplican los precios de la lista de Mayoreo.
                       </p>
                     </div>
                   )}
@@ -272,11 +360,10 @@ export default function ConfigModule({ currentUser }: ConfigModuleProps) {
                   <span className="text-sm text-gray-700">Estado de la regla</span>
                   <button
                     onClick={() => handleToggleActive(rule.id, rule.is_active)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      rule.is_active
-                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${rule.is_active
+                      ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
                   >
                     {rule.is_active ? 'Activa' : 'Inactiva'}
                   </button>
@@ -376,11 +463,10 @@ export default function ConfigModule({ currentUser }: ConfigModuleProps) {
                   <span className="text-sm text-gray-700">Estado de la regla</span>
                   <button
                     onClick={() => handleToggleActive(rule.id, rule.is_active)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      rule.is_active
-                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${rule.is_active
+                      ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
                   >
                     {rule.is_active ? 'Activa' : 'Inactiva'}
                   </button>
@@ -407,27 +493,36 @@ export default function ConfigModule({ currentUser }: ConfigModuleProps) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="border border-gray-200 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="font-semibold text-gray-900">Lista Minorista</h4>
-              <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">Activa</span>
-            </div>
-            <p className="text-sm text-gray-600">
-              Precios estándar aplicados a ventas individuales y pedidos que no alcanzan el umbral de mayoreo.
-            </p>
-          </div>
+        {(() => {
+          const wholesaleRule = rules.find(r => r.rule_key === 'wholesale_threshold');
+          return (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold text-gray-900">Lista Minorista</h4>
+                  <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">Activa</span>
+                </div>
+                <p className="text-sm text-gray-600">
+                  Precios estándar aplicados a ventas individuales y pedidos que no alcanzan el umbral de mayoreo.
+                </p>
+              </div>
 
-          <div className="border border-gray-200 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="font-semibold text-gray-900">Lista Mayorista</h4>
-              <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">Activa</span>
+              <div className={`border rounded-lg p-4 ${wholesaleRule?.is_active ? 'border-gray-200' : 'border-gray-200 opacity-60'}`}>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold text-gray-900">Lista Mayorista</h4>
+                  {wholesaleRule?.is_active ? (
+                    <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">Activa</span>
+                  ) : (
+                    <span className="px-2 py-1 bg-red-100 text-red-700 text-xs rounded-full">Inactiva</span>
+                  )}
+                </div>
+                <p className="text-sm text-gray-600">
+                  Precios especiales aplicados automáticamente cuando el pedido supera el umbral configurado.
+                </p>
+              </div>
             </div>
-            <p className="text-sm text-gray-600">
-              Precios especiales aplicados automáticamente cuando el pedido supera el umbral configurado.
-            </p>
-          </div>
-        </div>
+          );
+        })()}
 
         <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-4">
           <p className="text-sm text-amber-800">
@@ -525,19 +620,17 @@ export default function ConfigModule({ currentUser }: ConfigModuleProps) {
                     {user.email || '-'}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <span className={`px-3 py-1 text-xs font-medium rounded-full ${
-                      user.role === 'admin' ? 'bg-red-100 text-red-700' :
+                    <span className={`px-3 py-1 text-xs font-medium rounded-full ${user.role === 'admin' ? 'bg-red-100 text-red-700' :
                       user.role === 'vendedor' ? 'bg-blue-100 text-blue-700' :
-                      'bg-green-100 text-green-700'
-                    }`}>
+                        'bg-green-100 text-green-700'
+                      }`}>
                       {user.role === 'admin' ? 'Administrador' :
-                       user.role === 'vendedor' ? 'Vendedor' : 'Cajero'}
+                        user.role === 'vendedor' ? 'Vendedor' : 'Cajero'}
                     </span>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <span className={`px-3 py-1 text-xs font-medium rounded-full ${
-                      user.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
-                    }`}>
+                    <span className={`px-3 py-1 text-xs font-medium rounded-full ${user.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                      }`}>
                       {user.is_active ? 'Activo' : 'Inactivo'}
                     </span>
                   </td>

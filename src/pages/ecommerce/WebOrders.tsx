@@ -20,7 +20,7 @@ export function WebOrders() {
             .from('orders')
             .select(`
                 *,
-                customer:customers(name, phone),
+                customer:customers(name, phone, email),
                 items:order_items(
                     *,
                     product:products(name, sku, image_url)
@@ -64,6 +64,7 @@ export function WebOrders() {
             case 'shipped': return 'bg-indigo-100 text-indigo-800';
             case 'ready_for_pickup': return 'bg-teal-100 text-teal-800';
             case 'completed': return 'bg-green-100 text-green-800';
+            case 'confirmed': return 'bg-emerald-100 text-emerald-800';
             case 'cancelled': return 'bg-red-100 text-red-800';
             default: return 'bg-gray-100 text-gray-800';
         }
@@ -76,7 +77,8 @@ export function WebOrders() {
             case 'processing': return 'Procesando';
             case 'shipped': return 'Enviado';
             case 'ready_for_pickup': return 'Listo para Recoger';
-            case 'completed': return 'Completado';
+            case 'completed': return 'Completado (Sin POS)';
+            case 'confirmed': return 'Venta POS / Ticket Emitido';
             case 'cancelled': return 'Cancelado';
             default: return status;
         }
@@ -103,6 +105,7 @@ export function WebOrders() {
                             <option value="processing">Procesando</option>
                             <option value="ready_for_pickup">Listos p/ Recoger</option>
                             <option value="shipped">Enviados</option>
+                            <option value="confirmed">Ventas POS Finalizadas</option>
                             <option value="completed">Completados</option>
                         </select>
                         <select
@@ -219,12 +222,12 @@ export function WebOrders() {
                                         <Store size={18} /> Listo para Recoger
                                     </button>
                                 )}
-                                {(selectedOrder.status === 'shipped' || selectedOrder.status === 'ready_for_pickup') && (
+                                {(selectedOrder.status === 'shipped' || selectedOrder.status === 'ready_for_pickup' || selectedOrder.status === 'completed') && (
                                     <button
-                                        onClick={() => handleStatusUpdate(selectedOrder.id, 'completed')}
-                                        className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2 shadow-sm"
+                                        onClick={() => window.location.href = `/?module=sales&orderId=${selectedOrder.id}`}
+                                        className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2 shadow-sm animate-pulse"
                                     >
-                                        <CheckCircle size={18} /> Completar
+                                        <Store size={18} /> Cobrar y Cerrar en Caja (POS)
                                     </button>
                                 )}
                             </div>
@@ -237,7 +240,12 @@ export function WebOrders() {
                                         <Eye size={18} /> Cliente
                                     </h3>
                                     <p className="font-medium text-lg">{selectedOrder.customer?.name || 'Cliente Invitado'}</p>
-                                    <p className="text-gray-600">{selectedOrder.customer?.phone}</p>
+                                    <p className="text-gray-600 font-medium">{selectedOrder.customer?.phone}</p>
+                                    {selectedOrder.customer?.email && (
+                                        <p className="text-blue-600 text-sm mt-1">
+                                            <a href={`mailto:${selectedOrder.customer.email}`}>{selectedOrder.customer.email}</a>
+                                        </p>
+                                    )}
                                 </div>
                                 <div className="bg-gray-50 p-4 rounded-lg">
                                     <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2">

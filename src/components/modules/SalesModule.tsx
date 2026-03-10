@@ -21,7 +21,13 @@ export default function SalesModule() {
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  const [wholesaleThreshold, setWholesaleThreshold] = useState(3000);
+  const [wholesaleConfig, setWholesaleConfig] = useState({
+    condition_type: 'amount',
+    threshold: 3000,
+    enable_extra_discount: false,
+    extra_discount_threshold: 5000,
+    extra_discount_percentage: 10
+  });
   const [showNewOrderModal, setShowNewOrderModal] = useState(false);
   const [showOrderDetails, setShowOrderDetails] = useState<Order | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -187,8 +193,14 @@ export default function SalesModule() {
       .eq('is_active', true)
       .maybeSingle();
 
-    if (data) {
-      setWholesaleThreshold(data.rule_value.amount);
+    if (data && data.rule_value) {
+      setWholesaleConfig({
+        condition_type: data.rule_value.condition_type || 'amount',
+        threshold: data.rule_value.threshold !== undefined ? data.rule_value.threshold : (data.rule_value.amount || 3000),
+        enable_extra_discount: data.rule_value.enable_extra_discount || false,
+        extra_discount_threshold: data.rule_value.extra_discount_threshold || 5000,
+        extra_discount_percentage: data.rule_value.extra_discount_percentage || 10
+      });
     }
   };
 
@@ -327,17 +339,40 @@ export default function SalesModule() {
   };
 
   const calculateTotal = () => {
-    const subtotal = cart.reduce((sum, item) => sum + (item.product.retail_price * item.quantity), 0);
-    const isWholesale = subtotal >= wholesaleThreshold;
+    const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+    const retailSubtotal = cart.reduce((sum, item) => sum + (item.product.retail_price * item.quantity), 0);
 
-    const total = cart.reduce((sum, item) => {
+    const isWholesale = wholesaleConfig.condition_type === 'pieces'
+      ? totalItems >= wholesaleConfig.threshold
+      : retailSubtotal >= wholesaleConfig.threshold;
+
+    const subtotalCalc = cart.reduce((sum, item) => {
       const price = isWholesale ? item.product.wholesale_price : item.product.retail_price;
       return sum + (price * item.quantity);
     }, 0);
 
+    let extraDiscountAmount = 0;
+    if (isWholesale && wholesaleConfig.enable_extra_discount) {
+      const meetsExtra = wholesaleConfig.condition_type === 'pieces'
+        ? totalItems >= wholesaleConfig.extra_discount_threshold
+        : subtotalCalc >= wholesaleConfig.extra_discount_threshold;
+
+      if (meetsExtra) {
+        extraDiscountAmount = subtotalCalc * (wholesaleConfig.extra_discount_percentage / 100);
+      }
+    }
+
+    const total = subtotalCalc - extraDiscountAmount;
     const changeGiven = amountTendered > total ? amountTendered - total : 0;
 
-    return { subtotal, total, isWholesale, changeGiven };
+    return {
+      subtotal: retailSubtotal,
+      subtotalCalc,
+      extraDiscountAmount,
+      total,
+      isWholesale,
+      changeGiven
+    };
   };
 
   const generateOrderNumber = () => {
@@ -1304,7 +1339,11 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
           <div>
             <h3 className="font-semibold text-amber-900">Calculadora Automática de Mayoreo</h3>
             <p className="text-sm text-amber-700">
-              Umbral: ${wholesaleThreshold.toLocaleString('es-MX')} MXN - Los precios se ajustan automáticamente al superar este monto
+              {wholesaleConfig.condition_type === 'amount'
+                ? `Umbral: $${wholesaleConfig.threshold.toLocaleString('es-MX')} MXN`
+                : `Umbral: ${wholesaleConfig.threshold} Piezas`}
+              {wholesaleConfig.enable_extra_discount && ` + ${wholesaleConfig.extra_discount_percentage}% Extra al superar ${wholesaleConfig.condition_type === 'amount' ? `$${wholesaleConfig.extra_discount_threshold.toLocaleString('es-MX')} MXN` : `${wholesaleConfig.extra_discount_threshold} Piezas`}`}
+              - Los precios se ajustan automáticamente
             </p>
           </div>
         </div>
@@ -1691,19 +1730,26 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
                           Precios de Mayoreo Aplicados
                         </p>
                         <p className="text-xs text-blue-600">
-                          El total supera ${wholesaleThreshold.toLocaleString('es-MX')}
+                          {wholesaleConfig.condition_type === 'amount'
+                            ? `Se logró la meta de $${wholesaleConfig.threshold.toLocaleString('es-MX')}`
+                            : `Se logró la meta de ${wholesaleConfig.threshold} Piezas`}
                         </p>
+                        {calculateTotal().extraDiscountAmount > 0 && (
+                          <p className="text-sm text-green-700 font-bold mt-1">
+                            ¡+ {wholesaleConfig.extra_discount_percentage}% Descuento Extra Aplicado!
+                          </p>
+                        )}
                       </div>
                     )}
 
                     <div className="border-t border-gray-200 pt-4 space-y-2">
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">Subtotal:</span>
-                        <span className="text-gray-900">${subtotal.toLocaleString('es-MX')}</span>
+                        <span className="text-gray-900">${calculateTotal().subtotal.toLocaleString('es-MX')}</span>
                       </div>
                       <div className="flex justify-between text-lg font-bold">
                         <span className="text-gray-900">Total:</span>
-                        <span className="text-amber-600">${total.toLocaleString('es-MX')}</span>
+                        <span className="text-amber-600">${calculateTotal().total.toLocaleString('es-MX')}</span>
                       </div>
                     </div>
 
