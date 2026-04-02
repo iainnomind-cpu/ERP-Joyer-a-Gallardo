@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { MessageSquare, Plus, RefreshCw, Send, CheckCircle, AlertCircle, Clock, X } from 'lucide-react';
+import { MessageSquare, Plus, RefreshCw, Send, CheckCircle, AlertCircle, Clock, X, Trash2 } from 'lucide-react';
 
 interface TemplateComponent {
   type: string;
@@ -256,6 +256,20 @@ export default function WhatsAppTemplateBuilder() {
     setShowCreator(true);
   };
 
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (!window.confirm('¿Estás seguro de que deseas eliminar esta plantilla del sistema? (Si fue enviada a Meta, seguirá existiendo allá pero se ocultará de tu vista aquí)')) return;
+
+    try {
+      const { error } = await supabase.from('whatsapp_templates').delete().eq('id', id);
+      if (error) throw error;
+      setTemplates(templates.filter(t => t.id !== id));
+    } catch (error: any) {
+      console.error(error);
+      alert('Error al eliminar la plantilla: ' + error.message);
+    }
+  };
+
   return (
     <div className="space-y-6">
 
@@ -304,14 +318,23 @@ export default function WhatsAppTemplateBuilder() {
                     </div>
                     <div className="flex flex-col items-end gap-2">
                        <StatusBadge status={tpl.status} tpl={tpl} />
-                       {(tpl.status === 'DRAFT' || tpl.status === 'REJECTED') && (
+                       <div className="flex gap-2 items-center">
+                         {(tpl.status === 'DRAFT' || tpl.status === 'REJECTED') && (
+                           <button 
+                             onClick={() => handleEdit(tpl)}
+                             className="text-xs text-blue-600 hover:text-blue-800 font-medium bg-blue-50 px-2 py-1 rounded"
+                           >
+                             Editar y Reintentar
+                           </button>
+                         )}
                          <button 
-                           onClick={() => handleEdit(tpl)}
-                           className="text-xs text-blue-600 hover:text-blue-800 font-medium bg-blue-50 px-2 py-1 rounded"
+                           onClick={(e) => handleDelete(e, tpl.id)}
+                           className="text-xs text-red-500 hover:text-red-700 bg-red-50 p-1.5 rounded"
+                           title="Eliminar plantilla del sistema"
                          >
-                           Editar y Reintentar
+                           <Trash2 className="w-3.5 h-3.5" />
                          </button>
-                       )}
+                       </div>
                     </div>
                   </div>
                   
