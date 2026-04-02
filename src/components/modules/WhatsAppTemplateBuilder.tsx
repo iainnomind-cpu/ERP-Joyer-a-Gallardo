@@ -24,6 +24,7 @@ export default function WhatsAppTemplateBuilder() {
   const [loading, setLoading] = useState(true);
   const [showCreator, setShowCreator] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const textAreaRef = React.useRef<HTMLTextAreaElement>(null);
 
   // Form states
   const [name, setName] = useState('');
@@ -61,7 +62,23 @@ export default function WhatsAppTemplateBuilder() {
   const SYSTEM_VARIABLES = ['Nombre', 'Apellidos', 'Joya', 'Material', 'Monto', 'Fecha', 'Vendedor'];
 
   const insertVariable = (variable: string) => {
-    setBodyText(prev => prev + ` [${variable}]`);
+    const varText = `[${variable}]`;
+    const elem = textAreaRef.current;
+    
+    if (elem) {
+      const start = elem.selectionStart;
+      const end = elem.selectionEnd;
+      const newText = bodyText.substring(0, start) + varText + bodyText.substring(end);
+      setBodyText(newText);
+      
+      // Retain focus and move cursor after the inserted variable
+      setTimeout(() => {
+        elem.focus();
+        elem.setSelectionRange(start + varText.length, start + varText.length);
+      }, 0);
+    } else {
+      setBodyText(prev => prev + ` ${varText}`);
+    }
   };
 
   const handleDragStart = (e: React.DragEvent, variable: string) => {
@@ -280,6 +297,7 @@ export default function WhatsAppTemplateBuilder() {
                 </div>
 
                 <textarea
+                  ref={textAreaRef}
                   value={bodyText}
                   onChange={e => setBodyText(e.target.value)}
                   className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#25D366] outline-none min-h-[200px] resize-none whitespace-pre-wrap text-slate-700 text-[15px] leading-relaxed"
