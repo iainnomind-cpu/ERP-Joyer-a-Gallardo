@@ -58,22 +58,43 @@ export default function WhatsAppTemplateBuilder() {
     }
   };
 
-  const insertVariable = () => {
-    // Current highest variable number
-    const count = (bodyText.match(/{{(\d+)}}/g) || []).length;
-    const nextVar = `{{${count + 1}}}`;
-    setBodyText(prev => prev + ' ' + nextVar);
+  const SYSTEM_VARIABLES = ['Nombre', 'Apellidos', 'Joya', 'Material', 'Monto', 'Fecha', 'Vendedor'];
+
+  const insertVariable = (variable: string) => {
+    setBodyText(prev => prev + ` [${variable}]`);
+  };
+
+  const handleDragStart = (e: React.DragEvent, variable: string) => {
+    e.dataTransfer.setData('text/plain', `[${variable}]`);
   };
 
   const parsePreviewBody = (text: string) => {
-    // Reemplaza {{1}} por variables resaltadas en la UI
-    const parts = text.split(/({{\d+}})/g);
+    // Reemplaza [Variable] por variables resaltadas visualmente
+    const parts = text.split(/(\[[^\]]+\])/g);
     return parts.map((part, i) => {
-      if (part.match(/({{\d+}})/)) {
-        return <span key={i} className="bg-blue-100 text-blue-800 px-1 py-0.5 rounded text-xs font-mono">{part}</span>;
+      if (part.match(/(\[[^\]]+\])/)) {
+        return <span key={i} className="bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded-md text-xs font-semibold shadow-sm inline-block mx-0.5">{part.replace(/[\[\]]/g, '')}</span>;
       }
       return <span key={i} className="whitespace-pre-wrap">{part}</span>;
     });
+  };
+
+  const convertToMetaFormat = (text: string) => {
+    // Reemplaza todos los [Variable1], [Variable2] por {{1}}, {{2}} y devuelve el texto procesado
+    // Necesitamos que variables repetidas tengan el mismo ID, o distinto? Meta requiere incrementales.
+    // Ejemplo: Hola [Nombre], tu [Joya] cuesta [Monto]. -> Hola {{1}}, tu {{2}} cuesta {{3}}.
+    let metaText = text;
+    let counter = 1;
+    // Extraemos únicos
+    const matches = text.match(/\[[^\]]+\]/g) || [];
+    const uniqueVars = Array.from(new Set(matches));
+    
+    uniqueVars.forEach(v => {
+      metaText = metaText.split(v).join(`{{${counter}}}`);
+      counter++;
+    });
+    
+    return metaText;
   };
 
   const handleSendToReview = async () => {
@@ -84,8 +105,10 @@ export default function WhatsAppTemplateBuilder() {
 
     setSubmitting(true);
     try {
+      const finalMetaText = convertToMetaFormat(bodyText);
+
       const components = [
-        { type: 'BODY', text: bodyText }
+        { type: 'BODY', text: finalMetaText }
       ];
 
       // 1. Guardar localmente en Supabase como Borrador primero o enviando a Meta
@@ -130,7 +153,7 @@ export default function WhatsAppTemplateBuilder() {
 
       setShowCreator(false);
       setName('');
-      setBodyText('Hola {{1}}, ');
+      setBodyText('Hola [Nombre], ');
       loadTemplates();
       
     } catch (e: any) {
@@ -238,21 +261,32 @@ export default function WhatsAppTemplateBuilder() {
               <div>
                 <div className="flex justify-between items-end mb-2">
                   <label className="block text-sm font-medium text-slate-700">Mensaje (Body)</label>
-                  <button 
-                    onClick={insertVariable}
-                    className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-200 hover:bg-blue-100 flex items-center gap-1"
-                  >
-                    <Plus className="w-3 h-3"/> Agregar Variable {"{{ }"} 
-                  </button>
+                  <span className="text-xs text-slate-500">Arrastra las variables al texto o hazles clic</span>
                 </div>
+
+                <div className="flex flex-wrap gap-2 mb-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                  {SYSTEM_VARIABLES.map(v => (
+                    <div 
+                      key={v}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, v)}
+                      onClick={() => insertVariable(v)}
+                      className="cursor-move text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 px-2.5 py-1.5 rounded-md font-medium border border-blue-200 transition-colors flex items-center gap-1 shadow-sm"
+                      title="Arrastra o presiona para insertar"
+                    >
+                      <Plus className="w-3 h-3 opacity-50"/> {v}
+                    </div>
+                  ))}
+                </div>
+
                 <textarea
                   value={bodyText}
                   onChange={e => setBodyText(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#25D366] outline-none min-h-[200px] resize-none whitespace-pre-wrap"
+                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#25D366] outline-none min-h-[200px] resize-none whitespace-pre-wrap text-slate-700 text-[15px] leading-relaxed"
                   placeholder="Escribe tu mensaje aquí..."
                 />
                 <p className="text-xs text-slate-500 mt-2">
-                  Usa variables como <code className="bg-slate-100 px-1 rounded">{"{{1}}"}</code> para reemplazarlas luego por el nombre del cliente u otros datos al enviar la campaña. Meta rquiere saber cuántas variables usarás.
+                  Las variables <code className="bg-slate-100 px-1 rounded">[Nombre]</code> se convertirán internamente al formato <code className="bg-slate-100 px-1 rounded">{"{{1}}"}</code> requerido por Meta antes de enviarse a revisión.
                 </p>
               </div>
             </div>
