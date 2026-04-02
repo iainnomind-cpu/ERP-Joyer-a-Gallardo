@@ -3,7 +3,8 @@ import { supabase, Order, Customer, Product, BusinessRule, PaymentMethod, POSSes
 import {
   ShoppingCart, Plus, FileText, DollarSign, Calendar, Eye, X,
   Scan, Printer, CreditCard, Banknote, Smartphone, Link as LinkIcon,
-  AlertCircle, Check, TrendingUp, Monitor, Lock, Bell
+  AlertCircle, Check, TrendingUp, Monitor, Lock, Bell,
+  ArrowDownCircle, ArrowUpCircle, History, Receipt, Minus
 } from 'lucide-react';
 
 type CartItem = {
@@ -13,7 +14,21 @@ type CartItem = {
 
 
 
-export default function SalesModule() {
+interface CurrentUser {
+  id: string;
+  username: string;
+  full_name: string;
+  email?: string;
+  role: 'admin' | 'vendedor' | 'cajero';
+  is_active: boolean;
+}
+
+interface SalesModuleProps {
+  currentUser: CurrentUser | null;
+}
+
+export default function SalesModule({ currentUser }: SalesModuleProps) {
+  const getUserName = () => currentUser?.full_name || 'Sistema';
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -50,6 +65,19 @@ export default function SalesModule() {
 
 
   const [loadedOrderId, setLoadedOrderId] = useState<string | null>(null);
+
+  // New POS states
+  const [showCashCutModal, setShowCashCutModal] = useState(false);
+  const [showCashMovementModal, setShowCashMovementModal] = useState(false);
+  const [showSessionHistory, setShowSessionHistory] = useState(false);
+  const [cashCutData, setCashCutData] = useState<any>(null);
+  const [closingCashInput, setClosingCashInput] = useState(0);
+  const [cashMovementType, setCashMovementType] = useState<'cash_in' | 'cash_out' | 'withdrawal'>('cash_out');
+  const [cashMovementAmount, setCashMovementAmount] = useState(0);
+  const [cashMovementReason, setCashMovementReason] = useState('');
+  const [sessionHistory, setSessionHistory] = useState<any[]>([]);
+  const [cashMovements, setCashMovements] = useState<any[]>([]);
+  const [sessionTransactions, setSessionTransactions] = useState<any[]>([]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -252,7 +280,7 @@ export default function SalesModule() {
       .insert({
         terminal_id: selectedTerminal.id,
         session_number: sessionNumber,
-        opened_by: 'Cajero',
+        opened_by: getUserName(),
         opening_cash: openingCash,
       })
       .select()
@@ -264,37 +292,95 @@ export default function SalesModule() {
     }
   };
 
-  const handleCloseSession = async () => {
+  // --- Visual Cash Cut (replaces prompt) ---
+  const handleOpenCashCut = async () => {
     if (!currentSession) return;
 
     const { data: reconciliation } = await supabase.rpc('calculate_cash_reconciliation', {
       p_session_id: currentSession.id
     });
 
+    // Load transactions for this session
+    const { data: txns } = await supabase
+      .from('pos_transactions')
+      .select('*, orders(order_number, total)')
+      .eq('session_id', currentSession.id)
+      .order('completed_at', { ascending: false });
+
+    // Load cash movements for this session
+    const { data: movements } = await supabase
+      .from('cash_movements')
+      .select('*')
+      .eq('session_id', currentSession.id)
+      .order('created_at', { ascending: false });
+
     if (reconciliation && reconciliation.length > 0) {
-      const expected = reconciliation[0].expected_cash;
-      const closingCash = prompt(`Efectivo esperado: $${expected.toFixed(2)}\n\nIngrese el efectivo contado en caja:`);
-
-      if (closingCash !== null) {
-        const closingAmount = parseFloat(closingCash);
-        const difference = closingAmount - expected;
-
-        await supabase
-          .from('pos_sessions')
-          .update({
-            status: 'closed',
-            closed_by: 'Cajero',
-            closed_at: new Date().toISOString(),
-            closing_cash: closingAmount,
-            expected_cash: expected,
-            cash_difference: difference,
-          })
-          .eq('id', currentSession.id);
-
-        setCurrentSession(null);
-        alert(`Caja cerrada.\nDiferencia: $${difference.toFixed(2)} ${difference >= 0 ? '(Sobrante)' : '(Faltante)'}`);
-      }
+      setCashCutData(reconciliation[0]);
+      setClosingCashInput(reconciliation[0].expected_cash);
+      setSessionTransactions(txns || []);
+      setCashMovements(movements || []);
+      setShowCashCutModal(true);
     }
+  };
+
+  const handleConfirmCashCut = async () => {
+    if (!currentSession || !cashCutData) return;
+
+    const difference = closingCashInput - cashCutData.expected_cash;
+
+    const { error } = await supabase
+      .from('pos_sessions')
+      .update({
+        status: 'closed',
+        closed_by: getUserName(),
+        closed_at: new Date().toISOString(),
+        closing_cash: closingCashInput,
+        expected_cash: cashCutData.expected_cash,
+        cash_difference: difference,
+      })
+      .eq('id', currentSession.id);
+
+    if (!error) {
+      setCurrentSession(null);
+      setShowCashCutModal(false);
+      setCashCutData(null);
+      setClosingCashInput(0);
+    }
+  };
+
+  // --- Cash Movements ---
+  const handleRegisterCashMovement = async () => {
+    if (!currentSession || cashMovementAmount <= 0 || !cashMovementReason.trim()) return;
+
+    const { error } = await supabase
+      .from('cash_movements')
+      .insert({
+        session_id: currentSession.id,
+        movement_type: cashMovementType,
+        amount: cashMovementAmount,
+        reason: cashMovementReason.trim(),
+        created_by: getUserName(),
+      });
+
+    if (!error) {
+      setShowCashMovementModal(false);
+      setCashMovementAmount(0);
+      setCashMovementReason('');
+      loadCurrentSession();
+    }
+  };
+
+  // --- Session History ---
+  const loadSessionHistory = async () => {
+    const { data } = await supabase
+      .from('pos_sessions')
+      .select('*')
+      .eq('status', 'closed')
+      .order('closed_at', { ascending: false })
+      .limit(20);
+
+    if (data) setSessionHistory(data);
+    setShowSessionHistory(true);
   };
 
   const handleScanBarcode = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -375,11 +461,17 @@ export default function SalesModule() {
     };
   };
 
-  const generateOrderNumber = () => {
-    const lastOrder = orders[0];
-    if (!lastOrder) return '500';
-    const lastNumber = parseInt(lastOrder.order_number);
-    return (lastNumber + 1).toString();
+  const generateOrderNumber = async () => {
+    const { data } = await supabase
+      .from('orders')
+      .select('order_number')
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (!data || data.length === 0) return '500';
+
+    const maxNum = Math.max(...data.map(o => parseInt(o.order_number) || 0));
+    return (maxNum + 1).toString();
   };
 
   const handleCreateOrder = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -392,7 +484,7 @@ export default function SalesModule() {
 
     const formData = new FormData(e.currentTarget);
     const { subtotal, total, isWholesale } = calculateTotal();
-    const orderNumber = loadedOrderId ? orders.find(o => o.id === loadedOrderId)?.order_number || generateOrderNumber() : generateOrderNumber();
+    const orderNumber = loadedOrderId ? orders.find(o => o.id === loadedOrderId)?.order_number || await generateOrderNumber() : await generateOrderNumber();
 
     let orderData = null;
     let orderError = null;
@@ -405,7 +497,7 @@ export default function SalesModule() {
           pos_terminal_id: selectedTerminal?.id,
           status: 'confirmed', // Taken over by POS
           payment_status: 'paid', // Optimistic, will confirm in next step
-          served_by: 'Cajero', // TODO: Use real user
+          served_by: getUserName(), // TODO: Use real user
           notes: formData.get('notes') as string || null,
           updated_at: new Date().toISOString()
         })
@@ -461,10 +553,13 @@ export default function SalesModule() {
           delivery_address: formData.get('delivery_address') as string || null,
           payment_status: 'paid',
           notes: formData.get('notes') as string || null,
-          served_by: 'Cajero',
+          served_by: getUserName(),
         })
         .select()
         .single();
+
+      orderData = data;
+      orderError = error;
 
       if (orderError || !orderData) {
         console.error('Error creating order:', orderError);
@@ -594,7 +689,7 @@ export default function SalesModule() {
         change_given: selectedPaymentMethod === 'credit' ? 0 : calculateTotal().changeGiven,
         ticket_printed: true,
         completed_at: new Date().toISOString(),
-        created_by: 'Cajero',
+        created_by: getUserName(),
       });
 
     if (currentSession) {
@@ -1240,21 +1335,43 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
           </div>
 
           {currentSession && (
-            <button
-              onClick={handleCloseSession}
-              className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-            >
-              <Lock className="w-4 h-4" />
-              <span>Cerrar Caja</span>
-            </button>
+            <>
+              <button
+                onClick={() => setShowCashMovementModal(true)}
+                className="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+              >
+                <DollarSign className="w-4 h-4" />
+                <span>Movimientos</span>
+              </button>
+              <button
+                onClick={loadSessionHistory}
+                className="flex items-center space-x-2 px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm"
+              >
+                <History className="w-4 h-4" />
+                <span>Historial</span>
+              </button>
+              <button
+                onClick={handleOpenCashCut}
+                className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              >
+                <Lock className="w-4 h-4" />
+                <span>Corte de Caja</span>
+              </button>
+            </>
           )}
 
           <button
-            onClick={() => setShowNewOrderModal(true)}
+            onClick={() => {
+              if (!currentSession) {
+                setShowSessionModal(true);
+              } else {
+                setShowNewOrderModal(true);
+              }
+            }}
             className="flex items-center space-x-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
           >
-            < Plus className="w-4 h-4" />
-            <span>Nueva Venta</span>
+            <Plus className="w-4 h-4" />
+            <span>{currentSession ? 'Nueva Venta' : 'Abrir Caja'}</span>
           </button>
         </div>
       </div>
@@ -1269,15 +1386,38 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
               <div>
                 <h3 className="font-semibold text-green-900">Sesión Activa: {currentSession.session_number}</h3>
                 <p className="text-sm text-green-700">
-                  {selectedTerminal?.terminal_name} - Apertura: ${currentSession.opening_cash.toLocaleString('es-MX')}
+                  Abierta por: {currentSession.opened_by} · Apertura: ${currentSession.opening_cash.toLocaleString('es-MX')}
                 </p>
               </div>
             </div>
-            <div className="text-right">
-              <p className="text-2xl font-bold text-green-900">${currentSession.total_sales.toLocaleString('es-MX')}</p>
-              <p className="text-sm text-green-700">{currentSession.total_transactions} transacciones</p>
+            <div className="flex items-center gap-6">
+              <div className="text-center">
+                <p className="text-xs text-green-700 uppercase font-medium">Ventas</p>
+                <p className="text-xl font-bold text-green-900">${currentSession.total_sales.toLocaleString('es-MX')}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xs text-green-700 uppercase font-medium">Txns</p>
+                <p className="text-xl font-bold text-green-900">{currentSession.total_transactions}</p>
+              </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {!currentSession && (
+        <div className="bg-gradient-to-r from-amber-50 to-yellow-50 border-2 border-dashed border-amber-300 rounded-lg p-8 text-center">
+          <Lock className="w-12 h-12 text-amber-500 mx-auto mb-3" />
+          <h3 className="text-lg font-bold text-amber-900 mb-1">Caja Cerrada</h3>
+          <p className="text-sm text-amber-700 mb-4">
+            Debe abrir una sesión de caja antes de registrar ventas.
+          </p>
+          <button
+            onClick={() => setShowSessionModal(true)}
+            className="px-6 py-3 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors font-semibold inline-flex items-center space-x-2"
+          >
+            <Monitor className="w-5 h-5" />
+            <span>Abrir Caja</span>
+          </button>
         </div>
       )}
 
@@ -2067,6 +2207,337 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
                   Cerrar
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ===== CASH CUT MODAL ===== */}
+      {showCashCutModal && cashCutData && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-red-600 to-red-700 text-white px-6 py-4 rounded-t-xl">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <Receipt className="w-6 h-6" />
+                  <div>
+                    <h3 className="text-lg font-bold">Corte de Caja</h3>
+                    <p className="text-red-200 text-sm">Sesión: {currentSession?.session_number}</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowCashCutModal(false)} className="text-red-200 hover:text-white">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
+                  <p className="text-xs text-green-700 font-medium">Fondo Inicial</p>
+                  <p className="text-lg font-bold text-green-900">${cashCutData.opening_cash?.toLocaleString('es-MX', {minimumFractionDigits: 2})}</p>
+                </div>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+                  <p className="text-xs text-blue-700 font-medium">Ventas Efectivo</p>
+                  <p className="text-lg font-bold text-blue-900">${cashCutData.total_cash_sales?.toLocaleString('es-MX', {minimumFractionDigits: 2})}</p>
+                </div>
+                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
+                  <p className="text-xs text-emerald-700 font-medium">Entradas</p>
+                  <p className="text-lg font-bold text-emerald-900">+${cashCutData.total_cash_in?.toLocaleString('es-MX', {minimumFractionDigits: 2})}</p>
+                </div>
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-center">
+                  <p className="text-xs text-orange-700 font-medium">Salidas</p>
+                  <p className="text-lg font-bold text-orange-900">-${cashCutData.total_cash_out?.toLocaleString('es-MX', {minimumFractionDigits: 2})}</p>
+                </div>
+              </div>
+
+              {/* Expected Cash */}
+              <div className="bg-gray-900 text-white rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-300 font-medium">Efectivo Esperado en Caja</span>
+                  <span className="text-3xl font-bold">${cashCutData.expected_cash?.toLocaleString('es-MX', {minimumFractionDigits: 2})}</span>
+                </div>
+              </div>
+
+              {/* Transactions summary */}
+              {sessionTransactions.length > 0 && (
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                    <FileText className="w-4 h-4" /> Transacciones ({sessionTransactions.length})
+                  </h4>
+                  <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-lg">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 sticky top-0">
+                        <tr>
+                          <th className="text-left px-3 py-2 text-xs text-gray-500">Transacción</th>
+                          <th className="text-left px-3 py-2 text-xs text-gray-500">Método</th>
+                          <th className="text-right px-3 py-2 text-xs text-gray-500">Monto</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {sessionTransactions.map((txn: any) => (
+                          <tr key={txn.id} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 text-gray-900">{txn.transaction_number}</td>
+                            <td className="px-3 py-2">
+                              <span className={`px-2 py-0.5 text-xs rounded-full ${
+                                txn.payment_method === 'cash' ? 'bg-green-100 text-green-700' :
+                                txn.payment_method === 'credit' ? 'bg-purple-100 text-purple-700' :
+                                'bg-blue-100 text-blue-700'
+                              }`}>
+                                {txn.payment_method === 'cash' ? 'Efectivo' :
+                                 txn.payment_method === 'credit' ? 'Crédito' :
+                                 txn.payment_method}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-right font-medium text-gray-900">
+                              ${txn.orders?.total?.toLocaleString('es-MX') || '0'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Cash movements summary */}
+              {cashMovements.length > 0 && (
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                    <DollarSign className="w-4 h-4" /> Movimientos de Caja ({cashMovements.length})
+                  </h4>
+                  <div className="space-y-1">
+                    {cashMovements.map((mov: any) => (
+                      <div key={mov.id} className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded text-sm">
+                        <div className="flex items-center gap-2">
+                          {mov.movement_type === 'cash_in' || mov.movement_type === 'deposit'
+                            ? <ArrowDownCircle className="w-4 h-4 text-green-600" />
+                            : <ArrowUpCircle className="w-4 h-4 text-red-600" />}
+                          <span className="text-gray-700">{mov.reason}</span>
+                        </div>
+                        <span className={`font-medium ${
+                          mov.movement_type === 'cash_in' || mov.movement_type === 'deposit' ? 'text-green-600' : 'text-red-600'
+                        }`}>
+                          {mov.movement_type === 'cash_in' || mov.movement_type === 'deposit' ? '+' : '-'}${mov.amount?.toLocaleString('es-MX', {minimumFractionDigits: 2})}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Closing Input */}
+              <div className="border-2 border-amber-300 bg-amber-50 rounded-lg p-4">
+                <label className="block text-sm font-bold text-amber-900 mb-2">
+                  💵 Efectivo Total Contado en Caja
+                </label>
+                <input
+                  type="number"
+                  value={closingCashInput || ''}
+                  onChange={(e) => setClosingCashInput(parseFloat(e.target.value) || 0)}
+                  className="w-full px-4 py-3 text-2xl font-bold text-center border-2 border-amber-400 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                  placeholder="0.00"
+                  step="0.01"
+                  min="0"
+                />
+
+                {closingCashInput > 0 && (
+                  <div className={`mt-3 p-3 rounded-lg text-center ${
+                    closingCashInput - cashCutData.expected_cash >= 0
+                      ? 'bg-green-100 border border-green-300'
+                      : 'bg-red-100 border border-red-300'
+                  }`}>
+                    <p className="text-sm font-medium text-gray-700">Diferencia</p>
+                    <p className={`text-2xl font-bold ${
+                      closingCashInput - cashCutData.expected_cash >= 0 ? 'text-green-700' : 'text-red-700'
+                    }`}>
+                      ${(closingCashInput - cashCutData.expected_cash).toLocaleString('es-MX', {minimumFractionDigits: 2})}
+                      {' '}
+                      <span className="text-sm font-normal">
+                        {closingCashInput - cashCutData.expected_cash >= 0 ? '(Sobrante)' : '(Faltante)'}
+                      </span>
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setShowCashCutModal(false)}
+                  className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleConfirmCashCut}
+                  disabled={closingCashInput <= 0}
+                  className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-semibold flex items-center justify-center space-x-2"
+                >
+                  <Lock className="w-4 h-4" />
+                  <span>Confirmar Cierre</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== CASH MOVEMENT MODAL ===== */}
+      {showCashMovementModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-md w-full">
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-4 rounded-t-xl">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <DollarSign className="w-6 h-6" />
+                  <h3 className="text-lg font-bold">Movimiento de Efectivo</h3>
+                </div>
+                <button onClick={() => setShowCashMovementModal(false)} className="text-blue-200 hover:text-white">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Movimiento</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { value: 'cash_in' as const, label: 'Entrada', icon: ArrowDownCircle, color: 'green' },
+                    { value: 'cash_out' as const, label: 'Salida', icon: ArrowUpCircle, color: 'red' },
+                    { value: 'withdrawal' as const, label: 'Retiro', icon: Minus, color: 'orange' },
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setCashMovementType(opt.value)}
+                      className={`p-3 border-2 rounded-lg flex flex-col items-center gap-1 transition-colors text-sm ${
+                        cashMovementType === opt.value
+                          ? `border-${opt.color}-500 bg-${opt.color}-50 text-${opt.color}-700`
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                      style={cashMovementType === opt.value ? {
+                        borderColor: opt.color === 'green' ? '#22c55e' : opt.color === 'red' ? '#ef4444' : '#f97316',
+                        backgroundColor: opt.color === 'green' ? '#f0fdf4' : opt.color === 'red' ? '#fef2f2' : '#fff7ed'
+                      } : {}}
+                    >
+                      <opt.icon className="w-5 h-5" />
+                      <span className="font-medium">{opt.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Monto</label>
+                <input
+                  type="number"
+                  value={cashMovementAmount || ''}
+                  onChange={(e) => setCashMovementAmount(parseFloat(e.target.value) || 0)}
+                  className="w-full px-4 py-3 text-xl font-bold text-center border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="0.00"
+                  step="0.01"
+                  min="0"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Razón / Concepto</label>
+                <input
+                  type="text"
+                  value={cashMovementReason}
+                  onChange={(e) => setCashMovementReason(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Ej: Pago a proveedor, cambio, gasto de limpieza..."
+                />
+              </div>
+
+              <div className="flex space-x-3 pt-2">
+                <button
+                  onClick={() => setShowCashMovementModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleRegisterCashMovement}
+                  disabled={cashMovementAmount <= 0 || !cashMovementReason.trim()}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-semibold flex items-center justify-center space-x-2"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Registrar</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== SESSION HISTORY MODAL ===== */}
+      {showSessionHistory && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-4xl w-full max-h-[85vh] overflow-hidden">
+            <div className="bg-gradient-to-r from-gray-700 to-gray-800 text-white px-6 py-4 rounded-t-xl">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <History className="w-6 h-6" />
+                  <h3 className="text-lg font-bold">Historial de Sesiones</h3>
+                </div>
+                <button onClick={() => setShowSessionHistory(false)} className="text-gray-300 hover:text-white">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-y-auto max-h-[calc(85vh-64px)]">
+              {sessionHistory.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">
+                  <History className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                  <p>No hay sesiones anteriores</p>
+                </div>
+              ) : (
+                <table className="w-full">
+                  <thead className="bg-gray-50 sticky top-0">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sesión</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Abierta por</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha Cierre</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Apertura</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Ventas</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Esperado</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Contado</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Diferencia</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {sessionHistory.map((session: any) => {
+                      const diff = session.cash_difference || 0;
+                      return (
+                        <tr key={session.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900">{session.session_number}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{session.opened_by}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {session.closed_at ? new Date(session.closed_at).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-right text-gray-900">${session.opening_cash?.toLocaleString('es-MX')}</td>
+                          <td className="px-4 py-3 text-sm text-right font-semibold text-green-700">${session.total_sales?.toLocaleString('es-MX')}</td>
+                          <td className="px-4 py-3 text-sm text-right text-gray-900">${session.expected_cash?.toLocaleString('es-MX') || '-'}</td>
+                          <td className="px-4 py-3 text-sm text-right text-gray-900">${session.closing_cash?.toLocaleString('es-MX') || '-'}</td>
+                          <td className="px-4 py-3 text-sm text-right">
+                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                              diff === 0 ? 'bg-green-100 text-green-700' :
+                              diff > 0 ? 'bg-blue-100 text-blue-700' :
+                              'bg-red-100 text-red-700'
+                            }`}>
+                              {diff >= 0 ? '+' : ''}${diff?.toLocaleString('es-MX', {minimumFractionDigits: 2})}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         </div>

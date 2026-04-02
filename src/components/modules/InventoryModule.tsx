@@ -24,6 +24,7 @@ export default function InventoryModule({ currentUser }: InventoryModuleProps) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<string | null>(null);
+  const [stockEditValues, setStockEditValues] = useState<{ a: number; b: number; c: number }>({ a: 0, b: 0, c: 0 });
   const [editingFullProduct, setEditingFullProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [showMovementsModal, setShowMovementsModal] = useState<Product | null>(null);
@@ -163,10 +164,12 @@ export default function InventoryModule({ currentUser }: InventoryModuleProps) {
   };
 
   const handleUpdateStock = async (productId: string, stockA: number, stockB: number, stockC: number) => {
-    const product = products.find(p => p.id === productId);
-    if (!product) return;
+    console.log('[Stock] Llamando handleUpdateStock', { productId, stockA, stockB, stockC });
 
-    const { error } = await supabase
+    const product = products.find(p => p.id === productId);
+    console.log('[Stock] Producto en estado:', product ? product.name : 'NO ENCONTRADO', '| Total productos:', products.length);
+
+    const { data, error } = await supabase
       .from('products')
       .update({
         stock_a: stockA,
@@ -174,24 +177,34 @@ export default function InventoryModule({ currentUser }: InventoryModuleProps) {
         stock_c: stockC,
         updated_at: new Date().toISOString()
       })
-      .eq('id', productId);
+      .eq('id', productId)
+      .select('id, stock_a, stock_b, stock_c, total_stock');
+
+    console.log('[Stock] Respuesta Supabase update:', { data, error });
 
     if (!error) {
-      await supabase
-        .from('inventory_movements')
-        .insert({
-          product_id: productId,
-          movement_type: 'adjustment',
-          quantity_a: stockA,
-          quantity_b: stockB,
-          quantity_c: stockC,
-          notes: `Ajuste manual: Almacén=${product.stock_a}→${stockA}, Local GJ=${product.stock_b}→${stockB}, Local 2=${product.stock_c}→${stockC}`,
-          created_by: getUserName()
-        });
+      if (product) {
+        const { error: movErr } = await supabase
+          .from('inventory_movements')
+          .insert({
+            product_id: productId,
+            movement_type: 'adjustment',
+            quantity_a: stockA,
+            quantity_b: stockB,
+            quantity_c: stockC,
+            notes: `Ajuste manual de stock`,
+            created_by: getUserName()
+          });
+        if (movErr) console.warn('[Stock] Error al registrar movimiento (no crítico):', movErr);
+      }
 
       setEditingProduct(null);
+      setStockEditValues({ a: 0, b: 0, c: 0 });
       loadProducts();
       loadStockAlerts();
+    } else {
+      console.error('[Stock] ERROR en Supabase:', error);
+      alert('Error al guardar el stock: ' + error.message);
     }
   };
 
@@ -863,22 +876,22 @@ export default function InventoryModule({ currentUser }: InventoryModuleProps) {
                         <div className="flex space-x-1">
                           <input
                             type="number"
-                            id={`stock-a-${product.id}`}
-                            defaultValue={product.stock_a}
+                            value={stockEditValues.a}
+                            onChange={(e) => setStockEditValues(v => ({ ...v, a: Math.max(0, parseInt(e.target.value) || 0) }))}
                             min="0"
                             className="w-12 px-1 py-1 text-sm border border-gray-300 rounded"
                           />
                           <input
                             type="number"
-                            id={`stock-b-${product.id}`}
-                            defaultValue={product.stock_b}
+                            value={stockEditValues.b}
+                            onChange={(e) => setStockEditValues(v => ({ ...v, b: Math.max(0, parseInt(e.target.value) || 0) }))}
                             min="0"
                             className="w-12 px-1 py-1 text-sm border border-gray-300 rounded"
                           />
                           <input
                             type="number"
-                            id={`stock-c-${product.id}`}
-                            defaultValue={product.stock_c}
+                            value={stockEditValues.c}
+                            onChange={(e) => setStockEditValues(v => ({ ...v, c: Math.max(0, parseInt(e.target.value) || 0) }))}
                             min="0"
                             className="w-12 px-1 py-1 text-sm border border-gray-300 rounded"
                           />
@@ -904,19 +917,14 @@ export default function InventoryModule({ currentUser }: InventoryModuleProps) {
                       {editingProduct === product.id ? (
                         <div className="flex space-x-2">
                           <button
-                            onClick={() => {
-                              const stockA = parseInt((document.getElementById(`stock-a-${product.id}`) as HTMLInputElement).value);
-                              const stockB = parseInt((document.getElementById(`stock-b-${product.id}`) as HTMLInputElement).value);
-                              const stockC = parseInt((document.getElementById(`stock-c-${product.id}`) as HTMLInputElement).value);
-                              handleUpdateStock(product.id, stockA, stockB, stockC);
-                            }}
+                            onClick={() => handleUpdateStock(product.id, stockEditValues.a, stockEditValues.b, stockEditValues.c)}
                             className="text-green-600 hover:text-green-800"
                             title="Guardar"
                           >
                             <Save className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => setEditingProduct(null)}
+                            onClick={() => { setEditingProduct(null); setStockEditValues({ a: 0, b: 0, c: 0 }); }}
                             className="text-gray-600 hover:text-gray-800"
                             title="Cancelar"
                           >
@@ -933,7 +941,10 @@ export default function InventoryModule({ currentUser }: InventoryModuleProps) {
                             <Edit className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => setEditingProduct(product.id)}
+                            onClick={() => {
+                              setEditingProduct(product.id);
+                              setStockEditValues({ a: product.stock_a, b: product.stock_b, c: product.stock_c });
+                            }}
                             className="text-amber-600 hover:text-amber-800"
                             title="Editar stock"
                           >

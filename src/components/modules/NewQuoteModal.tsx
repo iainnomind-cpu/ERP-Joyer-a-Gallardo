@@ -296,6 +296,49 @@ export default function NewQuoteModal({ onClose, onSuccess }: NewQuoteModalProps
 
       if (itemsError) throw itemsError;
 
+      // Integración con CRM Pipeline
+      if (customerId) {
+        // Encontrar la etapa "Cotización"
+        const { data: stageData } = await supabase
+          .from('pipeline_stages')
+          .select('id')
+          .eq('name', 'Cotización')
+          .maybeSingle();
+
+        if (stageData) {
+          // Obtener el nombre del cliente para el título de la tarjeta
+          const customerName = customerMode === 'new' 
+            ? newCustomerForm.name.trim() 
+            : customers.find(c => c.id === customerId)?.name || 'Cliente';
+
+          // Crear tarjeta en el pipeline
+          const { data: pipelineCard, error: pipelineError } = await supabase
+            .from('pipeline_cards')
+            .insert([{
+              customer_id: customerId,
+              stage_id: stageData.id,
+              title: `Cotización ${orderNumber} - ${customerName}`,
+              description: `Cotización ${status === 'draft' ? 'en borrador' : 'generada'}.\nNotas: ${orderDetails.notes || 'Sin notas'}`,
+              estimated_value: total,
+              priority: 'medium'
+            }])
+            .select()
+            .single();
+
+          if (!pipelineError && pipelineCard) {
+            // Generar actividad en la tarjeta
+            await supabase
+              .from('pipeline_activities')
+              .insert([{
+                card_id: pipelineCard.id,
+                activity_type: 'created',
+                description: `Oportunidad generada automáticamente desde una nueva cotización (${orderNumber})`,
+                created_by: 'Sistema'
+              }]);
+          }
+        }
+      }
+
       onSuccess();
       onClose();
     } catch (err) {

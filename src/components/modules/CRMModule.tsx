@@ -257,6 +257,7 @@ export default function CRMModule({ currentUser }: CRMModuleProps) {
       loadCreditStats();
       alert('Operación de crédito registrada exitosamente');
     } else {
+      console.error('Error al registrar operación de crédito:', error);
       alert('Error al registrar la operación de crédito');
     }
   };
@@ -736,7 +737,7 @@ export default function CRMModule({ currentUser }: CRMModuleProps) {
               <h3 className="text-base sm:text-lg md:text-xl font-bold text-gray-900">Editar Cliente</h3>
             </div>
             <div className="px-3 sm:px-4 md:px-6 py-4">
-              <form onSubmit={handleEditCustomer} className="space-y-4">
+              <form id="edit-customer-form" onSubmit={handleEditCustomer} className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
                     <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
@@ -889,12 +890,7 @@ export default function CRMModule({ currentUser }: CRMModuleProps) {
                 </button>
                 <button
                   type="submit"
-                  onClick={(e) => {
-                    const form = e.currentTarget.closest('.bg-white')?.querySelector('form') as HTMLFormElement;
-                    if (form) {
-                      form.requestSubmit();
-                    }
-                  }}
+                  form="edit-customer-form"
                   className="w-full sm:flex-1 px-3 sm:px-4 py-2 text-sm sm:text-base bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
                   Guardar Cambios
@@ -933,7 +929,7 @@ export default function CRMModule({ currentUser }: CRMModuleProps) {
                 </div>
               </div>
 
-              <form onSubmit={handleCreditOperation} className="space-y-3 sm:space-y-4">
+              <form id="credit-operation-form" onSubmit={handleCreditOperation} className="space-y-3 sm:space-y-4">
                 <div>
                   <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
                     Tipo de Operación
@@ -1008,12 +1004,7 @@ export default function CRMModule({ currentUser }: CRMModuleProps) {
                 </button>
                 <button
                   type="submit"
-                  onClick={(e) => {
-                    const form = e.currentTarget.closest('.bg-white')?.querySelector('form') as HTMLFormElement;
-                    if (form) {
-                      form.requestSubmit();
-                    }
-                  }}
+                  form="credit-operation-form"
                   className="w-full sm:flex-1 px-3 sm:px-4 py-2 text-sm sm:text-base bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                 >
                   Registrar Operación
