@@ -133,8 +133,23 @@ export default function WhatsAppTemplateBuilder() {
       ];
 
       if (uniqueVars.length > 0) {
+        const dummyDataMap: Record<string, string> = {
+          'Nombre': 'Juan',
+          'Apellidos': 'Pérez',
+          'Joya': 'Anillo de compromiso',
+          'Material': 'Oro de 14k',
+          'Monto': '$1,500.00',
+          'Fecha': '14 de Febrero',
+          'Vendedor': 'María'
+        };
+
         components[0].example = {
-          body_text: [uniqueVars.map(v => `Ejemplo de ${v.replace(/[\[\]]/g, '')}`)]
+          body_text: [
+            uniqueVars.map(v => {
+              const baseVar = v.replace(/[\[\]]/g, '');
+              return dummyDataMap[baseVar] || 'Valor de prueba';
+            })
+          ]
         };
       }
 
