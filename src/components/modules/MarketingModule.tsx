@@ -18,6 +18,7 @@ import {
   Phone,
   Bell
 } from 'lucide-react';
+import WhatsAppTemplateBuilder from './WhatsAppTemplateBuilder';
 
 interface Campaign {
   id: string;
@@ -61,13 +62,11 @@ interface Automation {
 }
 
 export default function MarketingModule() {
-  const [activeTab, setActiveTab] = useState<'campaigns' | 'segments' | 'automations' | 'analytics'>('campaigns');
+  const [activeTab, setActiveTab] = useState<'campaigns' | 'segments' | 'templates' | 'analytics'>('campaigns');
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [segments, setSegments] = useState<Segment[]>([]);
-  const [automations, setAutomations] = useState<Automation[]>([]);
   const [showCampaignModal, setShowCampaignModal] = useState(false);
   const [showSegmentModal, setShowSegmentModal] = useState(false);
-  const [showAutomationModal, setShowAutomationModal] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const [newCampaign, setNewCampaign] = useState({
@@ -92,14 +91,6 @@ export default function MarketingModule() {
     }
   });
 
-  const [newAutomation, setNewAutomation] = useState({
-    name: '',
-    trigger_type: 'inactive_customer',
-    trigger_config: { days: 30 },
-    message_template: '',
-    channel: 'whatsapp'
-  });
-
   useEffect(() => {
     loadData();
   }, [activeTab]);
@@ -121,11 +112,11 @@ export default function MarketingModule() {
         setSegments(data || []);
       } else if (activeTab === 'automations') {
         const { data } = await supabase
-          .from('marketing_automations')
+          .from('marketing_segments')
           .select('*')
           .order('created_at', { ascending: false });
-        setAutomations(data || []);
-      }
+        setSegments(data || []);
+      } // Not loading automations here anymore since templates load themselves
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -191,42 +182,12 @@ export default function MarketingModule() {
     }
   };
 
-  const createAutomation = async () => {
-    try {
-      const { error } = await supabase
-        .from('marketing_automations')
-        .insert([newAutomation]);
-
-      if (!error) {
-        setShowAutomationModal(false);
-        setNewAutomation({
-          name: '',
-          trigger_type: 'inactive_customer',
-          trigger_config: { days: 30 },
-          message_template: '',
-          channel: 'whatsapp'
-        });
-        loadData();
-      }
-    } catch (error) {
-      console.error('Error creating automation:', error);
-    }
-  };
-
   const toggleCampaignStatus = async (campaignId: string, currentStatus: string) => {
     const newStatus = currentStatus === 'active' ? 'paused' : 'active';
     await supabase
       .from('marketing_campaigns')
       .update({ status: newStatus })
       .eq('id', campaignId);
-    loadData();
-  };
-
-  const toggleAutomation = async (automationId: string, currentStatus: boolean) => {
-    await supabase
-      .from('marketing_automations')
-      .update({ is_active: !currentStatus })
-      .eq('id', automationId);
     loadData();
   };
 
@@ -278,14 +239,10 @@ export default function MarketingModule() {
                   Nuevo Segmento
                 </button>
               )}
-              {activeTab === 'automations' && (
-                <button
-                  onClick={() => setShowAutomationModal(true)}
-                  className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  <Plus className="w-4 h-4" />
-                  Nueva Automatización
-                </button>
+              {activeTab === 'templates' && (
+                <div className="text-sm font-medium text-slate-500 flex items-center">
+                  Gestionadas a través de Meta
+                </div>
               )}
             </div>
           </div>
@@ -316,15 +273,15 @@ export default function MarketingModule() {
               Segmentos
             </button>
             <button
-              onClick={() => setActiveTab('automations')}
+              onClick={() => setActiveTab('templates')}
               className={`flex items-center gap-2 px-6 py-4 font-medium transition-colors ${
-                activeTab === 'automations'
+                activeTab === 'templates'
                   ? 'text-blue-600 border-b-2 border-blue-600'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <Zap className="w-4 h-4" />
-              Automatizaciones
+              <MessageSquare className="w-4 h-4" />
+              Plantillas (WhatsApp)
             </button>
             <button
               onClick={() => setActiveTab('analytics')}
@@ -470,73 +427,8 @@ export default function MarketingModule() {
           </div>
         )}
 
-        {activeTab === 'automations' && (
-          <div className="grid gap-4">
-            {loading ? (
-              <div className="text-center py-12 text-slate-600">Cargando automatizaciones...</div>
-            ) : automations.length === 0 ? (
-              <div className="bg-white rounded-xl p-12 text-center border border-slate-200">
-                <Zap className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">No hay automatizaciones todavía</h3>
-                <p className="text-slate-600 mb-4">Configura mensajes automáticos basados en eventos</p>
-                <button
-                  onClick={() => setShowAutomationModal(true)}
-                  className="inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  <Plus className="w-4 h-4" />
-                  Nueva Automatización
-                </button>
-              </div>
-            ) : (
-              automations.map((automation) => (
-                <div key={automation.id} className="bg-white rounded-xl p-6 border border-slate-200 hover:shadow-md transition-shadow">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="text-lg font-semibold text-slate-900">{automation.name}</h3>
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          automation.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {automation.is_active ? 'Activa' : 'Inactiva'}
-                        </span>
-                        <span className="flex items-center gap-1 px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-xs">
-                          {getChannelIcon(automation.channel)}
-                          {automation.channel}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-6 text-sm mb-4">
-                        <div className="flex items-center gap-2">
-                          <Settings className="w-4 h-4 text-slate-400" />
-                          <span className="text-slate-600">Trigger: {automation.trigger_type}</span>
-                        </div>
-                        {automation.last_run && (
-                          <div className="flex items-center gap-2">
-                            <Calendar className="w-4 h-4 text-slate-400" />
-                            <span className="text-slate-600">
-                              Última ejecución: {new Date(automation.last_run).toLocaleDateString('es-MX')}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                      <div className="bg-slate-50 rounded-lg p-4">
-                        <p className="text-sm text-slate-700">{automation.message_template}</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => toggleAutomation(automation.id, automation.is_active)}
-                      className={`ml-4 px-4 py-2 rounded-lg font-medium transition-colors ${
-                        automation.is_active
-                          ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                          : 'bg-green-100 text-green-700 hover:bg-green-200'
-                      }`}
-                    >
-                      {automation.is_active ? 'Desactivar' : 'Activar'}
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+        {activeTab === 'templates' && (
+          <WhatsAppTemplateBuilder />
         )}
 
         {activeTab === 'analytics' && (

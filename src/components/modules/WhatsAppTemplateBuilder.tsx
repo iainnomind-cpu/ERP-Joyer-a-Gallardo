@@ -1,0 +1,304 @@
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../../lib/supabase';
+import { MessageSquare, Plus, RefreshCw, Send, CheckCircle, AlertCircle, Clock, X } from 'lucide-react';
+
+interface TemplateComponent {
+  type: string;
+  text?: string;
+  format?: string;
+}
+
+interface WhatsAppTemplate {
+  id: string;
+  name: string;
+  category: string;
+  language: string;
+  components: TemplateComponent[];
+  status: string;
+  rejection_reason?: string;
+  created_at: string;
+}
+
+export default function WhatsAppTemplateBuilder() {
+  const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreator, setShowCreator] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Form states
+  const [name, setName] = useState('');
+  const [category, setCategory] = useState('MARKETING');
+  const [language, setLanguage] = useState('es_MX');
+  const [bodyText, setBodyText] = useState('Hola {{1}}, gracias por tu compra en Gallardo Joyas.');
+
+  useEffect(() => {
+    loadTemplates();
+  }, []);
+
+  const loadTemplates = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('whatsapp_templates')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (!error && data) {
+      setTemplates(data);
+    }
+    setLoading(false);
+  };
+
+  const StatusBadge = ({ status }: { status: string }) => {
+    switch (status) {
+      case 'APPROVED': return <span className="flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium"><CheckCircle className="w-3 h-3"/> Aprobada</span>;
+      case 'PENDING':
+      case 'IN_REVIEW': return <span className="flex items-center gap-1 px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium"><Clock className="w-3 h-3"/> En Revisión</span>;
+      case 'REJECTED': return <span className="flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium"><AlertCircle className="w-3 h-3"/> Rechazada</span>;
+      default: return <span className="flex items-center gap-1 px-2 py-1 bg-slate-100 text-slate-700 rounded-full text-xs font-medium">Borrador</span>;
+    }
+  };
+
+  const insertVariable = () => {
+    // Current highest variable number
+    const count = (bodyText.match(/{{(\d+)}}/g) || []).length;
+    const nextVar = `{{${count + 1}}}`;
+    setBodyText(prev => prev + ' ' + nextVar);
+  };
+
+  const parsePreviewBody = (text: string) => {
+    // Reemplaza {{1}} por variables resaltadas en la UI
+    const parts = text.split(/({{\d+}})/g);
+    return parts.map((part, i) => {
+      if (part.match(/({{\d+}})/)) {
+        return <span key={i} className="bg-blue-100 text-blue-800 px-1 py-0.5 rounded text-xs font-mono">{part}</span>;
+      }
+      return <span key={i} className="whitespace-pre-wrap">{part}</span>;
+    });
+  };
+
+  const handleSendToReview = async () => {
+    if (!name || !bodyText) {
+      alert("El nombre y el mensaje son obligatorios");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const components = [
+        { type: 'BODY', text: bodyText }
+      ];
+
+      // 1. Guardar localmente en Supabase como Borrador primero o enviando a Meta
+      const { data: insertedData, error: dbError } = await supabase
+        .from('whatsapp_templates')
+        .insert([{
+          name: name.toLowerCase().replace(/\\s+/g, '_'),
+          category,
+          language,
+          components,
+          status: 'IN_REVIEW' // Optimistic
+        }])
+        .select()
+        .single();
+      
+      if (dbError) throw dbError;
+
+      // 2. Llamada a Vercel Serverless Function (Meta API)
+      const baseUrl = window.location.origin;
+      const res = await fetch(`${baseUrl}/api/meta-templates`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.toLowerCase().replace(/\\s+/g, '_'),
+          category,
+          language,
+          components
+        })
+      });
+
+      const metaRes = await res.json();
+
+      if (!res.ok) {
+        // Falló en Meta, revertir a DRAFT
+        await supabase.from('whatsapp_templates').update({ status: 'DRAFT', rejection_reason: JSON.stringify(metaRes) }).eq('id', insertedData.id);
+        alert("La plantilla se guardó pero Meta la rechazó de inmediato. Revisa los errores.");
+      } else {
+        // Actualizar ID de meta
+        await supabase.from('whatsapp_templates').update({ meta_template_id: metaRes.meta_template_id }).eq('id', insertedData.id);
+        alert("¡Plantilla enviada a revisión con éxito!");
+      }
+
+      setShowCreator(false);
+      setName('');
+      setBodyText('Hola {{1}}, ');
+      loadTemplates();
+      
+    } catch (e: any) {
+      console.error(e);
+      alert("Error al guardar la plantilla: " + e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+
+      {!showCreator ? (
+        <>
+          <div className="flex justify-between items-center bg-white p-6 rounded-xl border border-slate-200">
+            <div>
+              <h2 className="text-xl font-bold text-slate-800">Plantillas de WhatsApp</h2>
+              <p className="text-sm text-slate-500">Diseña y solicita aprobación a Meta para tus mensajes automáticos.</p>
+            </div>
+            <button
+              onClick={() => setShowCreator(true)}
+              className="flex items-center gap-2 bg-[#25D366] text-white px-4 py-2 rounded-lg hover:bg-[#1DA851] transition-colors"
+            >
+              <Plus className="w-5 h-5" />
+              Nueva Plantilla
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {loading ? (
+              <p className="text-slate-500 col-span-full">Cargando plantillas...</p>
+            ) : templates.length === 0 ? (
+              <div className="col-span-full text-center py-12 bg-white rounded-xl border border-slate-200 border-dashed">
+                <MessageSquare className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                <h3 className="text-lg font-medium text-slate-700">Sin plantillas</h3>
+                <p className="text-slate-500 mb-4">Aún no has creado plantillas de WhatsApp.</p>
+                <button onClick={() => setShowCreator(true)} className="text-blue-600 font-medium hover:underline">Crear mi primera plantilla</button>
+              </div>
+            ) : (
+              templates.map(tpl => (
+                <div key={tpl.id} className="bg-white rounded-xl p-5 border border-slate-200 hover:shadow-md transition-all flex flex-col">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h4 className="font-semibold text-slate-800 break-all">{tpl.name}</h4>
+                      <div className="text-xs text-slate-500 mt-1 flex gap-2">
+                        <span className="uppercase">{tpl.category}</span>
+                        <span>•</span>
+                        <span className="uppercase">{tpl.language}</span>
+                      </div>
+                    </div>
+                    <StatusBadge status={tpl.status} />
+                  </div>
+                  
+                  <div className="bg-[#E5DDD5] p-3 rounded-lg flex-1 overflow-hidden relative">
+                    <div className="bg-[#DCF8C6] p-3 rounded-tr-lg rounded-tl-lg rounded-bl-lg shadow-sm text-sm text-[#303030] whitespace-pre-wrap relative z-10 w-full max-w-[90%] float-right">
+                       {tpl.components?.find(c => c.type === 'BODY')?.text || 'Sin contenido'}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col md:flex-row h-[700px]">
+          {/* Creador Columna Izquierda */}
+          <div className="flex-1 p-6 border-r border-slate-200 flex flex-col h-full overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-slate-800">Crear Plantilla</h2>
+              <button onClick={() => setShowCreator(false)} className="p-2 hover:bg-slate-100 rounded-full"><X className="w-5 h-5 text-slate-500"/></button>
+            </div>
+
+            <div className="space-y-5 flex-1">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nombre Interno (sin espacios, minúsculas)</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={e => setName(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                  placeholder="ej: promo_navidad_2026"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#25D366] outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Categoría</label>
+                  <select value={category} onChange={e => setCategory(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#25D366]">
+                    <option value="MARKETING">Marketing (Promociones)</option>
+                    <option value="UTILITY">Utilidad (Actualizaciones)</option>
+                    <option value="AUTHENTICATION">Autenticación (OTP)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Idioma</label>
+                  <select value={language} onChange={e => setLanguage(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#25D366]">
+                    <option value="es_MX">Español (México)</option>
+                    <option value="es">Español (General)</option>
+                    <option value="en">Inglés</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between items-end mb-2">
+                  <label className="block text-sm font-medium text-slate-700">Mensaje (Body)</label>
+                  <button 
+                    onClick={insertVariable}
+                    className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-200 hover:bg-blue-100 flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3"/> Agregar Variable {"{{ }"} 
+                  </button>
+                </div>
+                <textarea
+                  value={bodyText}
+                  onChange={e => setBodyText(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#25D366] outline-none min-h-[200px] resize-none whitespace-pre-wrap"
+                  placeholder="Escribe tu mensaje aquí..."
+                />
+                <p className="text-xs text-slate-500 mt-2">
+                  Usa variables como <code className="bg-slate-100 px-1 rounded">{"{{1}}"}</code> para reemplazarlas luego por el nombre del cliente u otros datos al enviar la campaña. Meta rquiere saber cuántas variables usarás.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-6 mt-6 border-t border-slate-200 flex gap-3">
+              <button 
+                onClick={() => setShowCreator(false)}
+                className="flex-1 px-4 py-3 rounded-lg border border-slate-300 font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleSendToReview}
+                disabled={submitting || !name || !bodyText}
+                className="flex-1 px-4 py-3 rounded-lg bg-[#25D366] text-white font-medium hover:bg-[#1DA851] disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
+              >
+                {submitting ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                Enviar a Revisión de Meta
+              </button>
+            </div>
+          </div>
+
+          {/* Previsualización Columna Derecha */}
+          <div className="w-[400px] bg-slate-50 relative flex flex-col justify-center items-center border-l border-slate-200 hidden md:flex">
+             <div className="absolute top-0 left-0 right-0 bg-[#075E54] text-white p-4 font-medium flex items-center gap-3 shadow z-10">
+               <div className="w-8 h-8 bg-slate-300 rounded-full overflow-hidden flex justify-center items-center">
+                 <img src="https://ui-avatars.com/api/?name=Gallardo+Joyas&background=E5DDD5&color=075E54" alt="GJ" />
+               </div>
+               <div>Gallardo Joyas</div>
+             </div>
+
+             <div className="w-full h-full bg-[#E5DDD5] bg-opacity-70 p-6 pt-20 overflow-y-auto" style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")', backgroundRepeat: 'repeat', backgroundSize: '70% auto', backgroundBlendMode: 'overlay'}}>
+                
+                <div className="bg-[#DCF8C6] p-3 rounded-tr-lg rounded-tl-lg rounded-bl-lg shadow text-[15px] text-[#303030] max-w-[90%] float-right relative break-words">
+                  {parsePreviewBody(bodyText)}
+                  <div className="text-[10px] text-slate-400 text-right mt-1.5 flex justify-end items-center gap-1">
+                    12:00 PM <span className="text-[#53bdeb]">✓✓</span>
+                  </div>
+                </div>
+
+             </div>
+
+             {/* Phone mockup frame optional (simplified for now as just a container) */}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
