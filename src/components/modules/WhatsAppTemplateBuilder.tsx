@@ -173,14 +173,21 @@ export default function WhatsAppTemplateBuilder() {
 
       // 2. Llamada a Vercel Serverless Function (Meta API)
       const baseUrl = window.location.origin;
+      
+      // Remover "format" porque Meta API lo rechaza en BODY components
+      const metaComponents = components.map(c => {
+        const { format, ...rest } = c;
+        return rest;
+      });
+
       const res = await fetch(`${baseUrl}/api/meta-templates`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: name.toLowerCase().replace(/\\s+/g, '_'),
+          name: name.toLowerCase().replace(/\s+/g, '_'),
           category,
           language,
-          components
+          components: metaComponents
         })
       });
 
@@ -189,7 +196,13 @@ export default function WhatsAppTemplateBuilder() {
       if (!res.ok) {
         // Falló en Meta, revertir a DRAFT
         await supabase.from('whatsapp_templates').update({ status: 'DRAFT', rejection_reason: JSON.stringify(metaRes) }).eq('id', savedTemplateId);
-        alert("La plantilla se guardó localmente pero en Meta falló (Status 4xx). Revisa los errores. ¿Está bien configurado tu API TOKEN?");
+        let errorMsg = "La plantilla se guardó localmente pero en Meta falló (Status 4xx).";
+        if (metaRes.details && metaRes.details.error) {
+           errorMsg += "\n\nRazón de Meta: " + metaRes.details.error.message;
+        } else if (metaRes.error) {
+           errorMsg += "\n\nError: " + metaRes.error;
+        }
+        alert(errorMsg);
       } else {
         // Actualizar ID de meta
         await supabase.from('whatsapp_templates').update({ meta_template_id: metaRes.meta_template_id }).eq('id', savedTemplateId);
