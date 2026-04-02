@@ -24,6 +24,7 @@ export default function WhatsAppTemplateBuilder() {
   const [loading, setLoading] = useState(true);
   const [showCreator, setShowCreator] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const textAreaRef = React.useRef<HTMLTextAreaElement>(null);
 
   // Form states
@@ -49,12 +50,12 @@ export default function WhatsAppTemplateBuilder() {
     setLoading(false);
   };
 
-  const StatusBadge = ({ status }: { status: string }) => {
+  const StatusBadge = ({ status, tpl }: { status: string, tpl?: any }) => {
     switch (status) {
       case 'APPROVED': return <span className="flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium"><CheckCircle className="w-3 h-3"/> Aprobada</span>;
       case 'PENDING':
       case 'IN_REVIEW': return <span className="flex items-center gap-1 px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium"><Clock className="w-3 h-3"/> En Revisión</span>;
-      case 'REJECTED': return <span className="flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium"><AlertCircle className="w-3 h-3"/> Rechazada</span>;
+      case 'REJECTED': return <span className="flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium" title={tpl?.rejection_reason}><AlertCircle className="w-3 h-3"/> Rechazada</span>;
       default: return <span className="flex items-center gap-1 px-2 py-1 bg-slate-100 text-slate-700 rounded-full text-xs font-medium">Borrador</span>;
     }
   };
@@ -124,24 +125,51 @@ export default function WhatsAppTemplateBuilder() {
     try {
       const finalMetaText = convertToMetaFormat(bodyText);
 
-      const components = [
-        { type: 'BODY', text: finalMetaText }
+      const matches = bodyText.match(/\[[^\]]+\]/g) || [];
+      const uniqueVars = Array.from(new Set(matches));
+
+      const components: any[] = [
+        { type: 'BODY', text: finalMetaText, format: bodyText }
       ];
 
-      // 1. Guardar localmente en Supabase como Borrador primero o enviando a Meta
-      const { data: insertedData, error: dbError } = await supabase
-        .from('whatsapp_templates')
-        .insert([{
-          name: name.toLowerCase().replace(/\\s+/g, '_'),
-          category,
-          language,
-          components,
-          status: 'IN_REVIEW' // Optimistic
-        }])
-        .select()
-        .single();
-      
-      if (dbError) throw dbError;
+      if (uniqueVars.length > 0) {
+        components[0].example = {
+          body_text: [uniqueVars.map(v => `Ejemplo de ${v.replace(/[\[\]]/g, '')}`)]
+        };
+      }
+
+      let savedTemplateId = editingId;
+
+      if (editingId) {
+        // Actualizar existente
+        const { error: dbError } = await supabase
+          .from('whatsapp_templates')
+          .update({
+            name: name.toLowerCase().replace(/\s+/g, '_'),
+            category,
+            language,
+            components,
+            status: 'IN_REVIEW',
+            rejection_reason: null
+          })
+          .eq('id', editingId);
+        if (dbError) throw dbError;
+      } else {
+        // Insertar nuevo
+        const { data: insertedData, error: dbError } = await supabase
+          .from('whatsapp_templates')
+          .insert([{
+            name: name.toLowerCase().replace(/\s+/g, '_'),
+            category,
+            language,
+            components,
+            status: 'IN_REVIEW' // Optimistic
+          }])
+          .select()
+          .single();
+        if (dbError) throw dbError;
+        savedTemplateId = insertedData.id;
+      }
 
       // 2. Llamada a Vercel Serverless Function (Meta API)
       const baseUrl = window.location.origin;
@@ -160,17 +188,15 @@ export default function WhatsAppTemplateBuilder() {
 
       if (!res.ok) {
         // Falló en Meta, revertir a DRAFT
-        await supabase.from('whatsapp_templates').update({ status: 'DRAFT', rejection_reason: JSON.stringify(metaRes) }).eq('id', insertedData.id);
-        alert("La plantilla se guardó pero Meta la rechazó de inmediato. Revisa los errores.");
+        await supabase.from('whatsapp_templates').update({ status: 'DRAFT', rejection_reason: JSON.stringify(metaRes) }).eq('id', savedTemplateId);
+        alert("La plantilla se guardó localmente pero en Meta falló (Status 4xx). Revisa los errores. ¿Está bien configurado tu API TOKEN?");
       } else {
         // Actualizar ID de meta
-        await supabase.from('whatsapp_templates').update({ meta_template_id: metaRes.meta_template_id }).eq('id', insertedData.id);
+        await supabase.from('whatsapp_templates').update({ meta_template_id: metaRes.meta_template_id }).eq('id', savedTemplateId);
         alert("¡Plantilla enviada a revisión con éxito!");
       }
 
-      setShowCreator(false);
-      setName('');
-      setBodyText('Hola [Nombre], ');
+      closeCreator();
       loadTemplates();
       
     } catch (e: any) {
@@ -179,6 +205,27 @@ export default function WhatsAppTemplateBuilder() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const closeCreator = () => {
+    setShowCreator(false);
+    setEditingId(null);
+    setName('');
+    setBodyText('Hola [Nombre], ');
+  };
+
+  const handleEdit = (tpl: WhatsAppTemplate) => {
+    setEditingId(tpl.id);
+    setName(tpl.name);
+    setCategory(tpl.category);
+    setLanguage(tpl.language);
+    
+    const bodyComp = tpl.components.find(c => c.type === 'BODY');
+    if (bodyComp) {
+      setBodyText(bodyComp.format || bodyComp.text || '');
+    }
+    
+    setShowCreator(true);
   };
 
   return (
@@ -192,7 +239,12 @@ export default function WhatsAppTemplateBuilder() {
               <p className="text-sm text-slate-500">Diseña y solicita aprobación a Meta para tus mensajes automáticos.</p>
             </div>
             <button
-              onClick={() => setShowCreator(true)}
+              onClick={() => {
+                setEditingId(null);
+                setName('');
+                setBodyText('Hola [Nombre], ');
+                setShowCreator(true);
+              }}
               className="flex items-center gap-2 bg-[#25D366] text-white px-4 py-2 rounded-lg hover:bg-[#1DA851] transition-colors"
             >
               <Plus className="w-5 h-5" />
@@ -216,13 +268,23 @@ export default function WhatsAppTemplateBuilder() {
                   <div className="flex justify-between items-start mb-4">
                     <div>
                       <h4 className="font-semibold text-slate-800 break-all">{tpl.name}</h4>
-                      <div className="text-xs text-slate-500 mt-1 flex gap-2">
+                      <div className="text-xs text-slate-500 mt-1 flex gap-2 items-center">
                         <span className="uppercase">{tpl.category}</span>
                         <span>•</span>
                         <span className="uppercase">{tpl.language}</span>
                       </div>
                     </div>
-                    <StatusBadge status={tpl.status} />
+                    <div className="flex flex-col items-end gap-2">
+                       <StatusBadge status={tpl.status} tpl={tpl} />
+                       {(tpl.status === 'DRAFT' || tpl.status === 'REJECTED') && (
+                         <button 
+                           onClick={() => handleEdit(tpl)}
+                           className="text-xs text-blue-600 hover:text-blue-800 font-medium bg-blue-50 px-2 py-1 rounded"
+                         >
+                           Editar y Reintentar
+                         </button>
+                       )}
+                    </div>
                   </div>
                   
                   <div className="bg-[#E5DDD5] p-3 rounded-lg flex-1 overflow-hidden relative">
@@ -240,8 +302,8 @@ export default function WhatsAppTemplateBuilder() {
           {/* Creador Columna Izquierda */}
           <div className="flex-1 p-6 border-r border-slate-200 flex flex-col h-full overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-slate-800">Crear Plantilla</h2>
-              <button onClick={() => setShowCreator(false)} className="p-2 hover:bg-slate-100 rounded-full"><X className="w-5 h-5 text-slate-500"/></button>
+              <h2 className="text-2xl font-bold text-slate-800">{editingId ? 'Editar Plantilla' : 'Crear Plantilla'}</h2>
+              <button onClick={closeCreator} className="p-2 hover:bg-slate-100 rounded-full"><X className="w-5 h-5 text-slate-500"/></button>
             </div>
 
             <div className="space-y-5 flex-1">
@@ -311,7 +373,7 @@ export default function WhatsAppTemplateBuilder() {
 
             <div className="pt-6 mt-6 border-t border-slate-200 flex gap-3">
               <button 
-                onClick={() => setShowCreator(false)}
+                onClick={closeCreator}
                 className="flex-1 px-4 py-3 rounded-lg border border-slate-300 font-medium text-slate-700 hover:bg-slate-50"
               >
                 Cancelar
