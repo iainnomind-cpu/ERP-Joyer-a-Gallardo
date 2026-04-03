@@ -76,7 +76,7 @@ export default async function handler(req: any, res: any) {
     if (!segmentData) throw new Error("Parámetros del segmento no encontrados");
 
     const cleanFilters = segmentData.filters;
-    let query = supabase.from('customers').select('id, phone, name');
+    let query = supabase.from('customers').select('id, phone, name, preferred_category, material_preference');
 
     if (cleanFilters.customerType === 'new') query = query.lte('total_purchases', 1);
     if (cleanFilters.customerType === 'frequent') query = query.gte('total_purchases', 2).lte('total_purchases', 5);
@@ -147,7 +147,8 @@ export default async function handler(req: any, res: any) {
         if (varMatches && varMatches.length > 0) {
           const bodyParams = varMatches.map((match: string, i: number) => {
             if (i === 0) return { type: "text", text: customer.name || "Apreciable Cliente" };
-            if (i === 1) return { type: "text", text: "Joyería Gallardo" };
+            if (i === 1) return { type: "text", text: customer.preferred_category || "Nuestra joyería de lujo" };
+            if (i === 2) return { type: "text", text: customer.material_preference || "nuestra más alta calidad" };
             return { type: "text", text: "Detalles especiales" };
           });
           templatePayload.components.push({

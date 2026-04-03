@@ -28,6 +28,7 @@ export type Customer = {
   email: string | null;
   source: string;
   material_preference: string;
+  preferred_category?: string;
   segment: string | null;
   total_purchases: number;
   last_purchase_date: string | null;

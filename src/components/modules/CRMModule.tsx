@@ -42,6 +42,8 @@ export default function CRMModule({ currentUser }: CRMModuleProps) {
     churnRisk: 0
   });
 
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+
   const [creditOperation, setCreditOperation] = useState({
     type: 'charge' as 'charge' | 'payment' | 'adjustment' | 'limit_change',
     amount: 0,
@@ -53,7 +55,13 @@ export default function CRMModule({ currentUser }: CRMModuleProps) {
     loadCustomers();
     loadChurnAlerts();
     loadCreditStats();
+    loadCategories();
   }, []);
+
+  const loadCategories = async () => {
+    const { data } = await supabase.from('categories').select('id, name').order('name');
+    if (data) setCategories(data);
+  };
 
   const getUserName = () => currentUser?.full_name || 'Sistema';
 
@@ -141,6 +149,7 @@ export default function CRMModule({ currentUser }: CRMModuleProps) {
         phone: formData.get('phone') as string,
         source: formData.get('source') as string,
         material_preference: formData.get('material_preference') as string,
+        preferred_category: formData.get('preferred_category') as string || null,
         credit_limit: creditLimit,
         credit_used: 0,
         credit_status: creditStatus,
@@ -179,6 +188,7 @@ export default function CRMModule({ currentUser }: CRMModuleProps) {
         phone: formData.get('phone') as string,
         source: formData.get('source') as string,
         material_preference: formData.get('material_preference') as string,
+        preferred_category: formData.get('preferred_category') as string || null,
         credit_limit: creditLimit,
         credit_status: creditStatus,
         credit_notes: formData.get('credit_notes') as string || null,
@@ -661,6 +671,20 @@ export default function CRMModule({ currentUser }: CRMModuleProps) {
                     <option value="Baño de Oro">Baño de Oro</option>
                   </select>
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Categoría Preferida
+                  </label>
+                  <select
+                    name="preferred_category"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                  >
+                    <option value="">Cualquiera</option>
+                    {categories.map(cat => (
+                      <option key={cat.id} value={cat.name}>{cat.name}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <div className="border-t border-gray-200 pt-4 mt-4">
@@ -795,6 +819,24 @@ export default function CRMModule({ currentUser }: CRMModuleProps) {
                       <option value="Ambos">Ambos</option>
                       <option value="Plata Pura">Plata Pura</option>
                       <option value="Baño de Oro">Baño de Oro</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Categoría Preferida
+                    </label>
+                    <select
+                      name="preferred_category"
+                      defaultValue={editingCustomer.preferred_category || ''}
+                      className="w-full px-2 sm:px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">Cualquiera</option>
+                      {categories.map(cat => (
+                        <option key={cat.id} value={cat.name}>{cat.name}</option>
+                      ))}
+                      {editingCustomer.preferred_category && !categories.find(c => c.name === editingCustomer.preferred_category) && (
+                         <option value={editingCustomer.preferred_category}>{editingCustomer.preferred_category} (Histórica)</option>
+                      )}
                     </select>
                   </div>
                 </div>

@@ -66,6 +66,7 @@ export default function MarketingModule() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [whatsappTemplates, setWhatsappTemplates] = useState<any[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [showCampaignModal, setShowCampaignModal] = useState(false);
   const [showSegmentModal, setShowSegmentModal] = useState(false);
   const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null);
@@ -88,7 +89,8 @@ export default function MarketingModule() {
     filters: {
       customerType: 'all',
       activity: 'all',
-      material: 'all'
+      material: 'all',
+      category: 'all'
     } as Record<string, string>
   });
 
@@ -99,6 +101,9 @@ export default function MarketingModule() {
   const loadData = async () => {
     setLoading(true);
     try {
+      const cats = await supabase.from('categories').select('id, name').order('name');
+      setCategories(cats.data || []);
+
       if (activeTab === 'campaigns') {
         const [campaignsRes, templatesRes] = await Promise.all([
           supabase.from('marketing_campaigns').select('*').order('created_at', { ascending: false }),
@@ -216,6 +221,10 @@ export default function MarketingModule() {
 
       if (cleanFilters.material === 'oro') q = q.ilike('material_preference', '%Oro%');
       if (cleanFilters.material === 'plata') q = q.ilike('material_preference', '%Plata%');
+      
+      if (cleanFilters.category) {
+         q = q.eq('preferred_category', cleanFilters.category);
+      }
 
       const { count } = await q;
 
@@ -251,7 +260,7 @@ export default function MarketingModule() {
     setNewSegment({
       name: '',
       description: '',
-      filters: { customerType: 'all', activity: 'all', material: 'all' }
+      filters: { customerType: 'all', activity: 'all', material: 'all', category: 'all' }
     });
   };
 
@@ -260,7 +269,7 @@ export default function MarketingModule() {
     setNewSegment({
       name: segment.name,
       description: segment.description || '',
-      filters: (segment.filters as any) || { customerType: 'all', activity: 'all', material: 'all' }
+      filters: (segment.filters as any) || { customerType: 'all', activity: 'all', material: 'all', category: 'all' }
     });
     setShowSegmentModal(true);
   };
@@ -807,6 +816,27 @@ export default function MarketingModule() {
                             className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors border shadow-sm ${newSegment.filters.material === opt.id ? 'bg-[#D4AF37] text-white border-[#D4AF37]' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'}`}
                           >
                             {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">4. Categoría de Producto</label>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => setNewSegment({ ...newSegment, filters: { ...newSegment.filters, category: 'all' } })}
+                          className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors border shadow-sm ${newSegment.filters.category === 'all' ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'}`}
+                        >
+                          Cualquiera
+                        </button>
+                        {categories.map(cat => (
+                          <button
+                            key={cat.id}
+                            onClick={() => setNewSegment({ ...newSegment, filters: { ...newSegment.filters, category: cat.name } })}
+                            className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors border shadow-sm ${newSegment.filters.category === cat.name ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'}`}
+                          >
+                            {cat.name}
                           </button>
                         ))}
                       </div>

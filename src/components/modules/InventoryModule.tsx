@@ -18,6 +18,7 @@ interface InventoryModuleProps {
 export default function InventoryModule({ currentUser }: InventoryModuleProps) {
   const getUserName = () => currentUser?.full_name || 'Sistema';
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [stockAlerts, setStockAlerts] = useState<StockAlert[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMaterial, setFilterMaterial] = useState<string>('all');
@@ -46,6 +47,7 @@ export default function InventoryModule({ currentUser }: InventoryModuleProps) {
   useEffect(() => {
     loadProducts();
     loadStockAlerts();
+    loadCategories();
   }, []);
 
   const loadProducts = async () => {
@@ -60,6 +62,27 @@ export default function InventoryModule({ currentUser }: InventoryModuleProps) {
       checkStockLevels(data);
     }
     setLoading(false);
+  };
+
+  const loadCategories = async () => {
+    const { data } = await supabase.from('categories').select('id, name').order('name');
+    if (data) setCategories(data);
+  };
+
+  const handleAddCategory = async () => {
+    const name = window.prompt('Ingrese el nombre de la nueva categoría:');
+    if (!name || name.trim() === '') return;
+    
+    // Convert to simple slug
+    const slug = name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
+    
+    const { data, error } = await supabase.from('categories').insert([{ name: name.trim(), slug }]).select();
+    if (error) {
+       window.alert('Error al crear categoría: ' + error.message);
+    } else {
+       await loadCategories();
+       window.alert('Categoría creada exitosamente.');
+    }
   };
 
   const loadStockAlerts = async () => {
@@ -1240,12 +1263,29 @@ export default function InventoryModule({ currentUser }: InventoryModuleProps) {
                 </div>
                 <div>
                   <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Categoría</label>
-                  <input
-                    type="text"
-                    name="category"
-                    defaultValue={editingFullProduct.category || ''}
-                    className="w-full px-2 sm:px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
+                  <div className="flex space-x-2">
+                    <select
+                      name="category"
+                      defaultValue={editingFullProduct.category || ''}
+                      className="w-full px-2 sm:px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent flex-1"
+                    >
+                      <option value="">Seleccione o escriba...</option>
+                      {categories.map(cat => (
+                        <option key={cat.id} value={cat.name}>{cat.name}</option>
+                      ))}
+                      {editingFullProduct.category && !categories.find(c => c.name === editingFullProduct.category) && (
+                        <option value={editingFullProduct.category}>{editingFullProduct.category} (Histórica)</option>
+                      )}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={handleAddCategory}
+                      className="p-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200"
+                      title="Nueva Categoría"
+                    >
+                      <Plus className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
               </div>
 
