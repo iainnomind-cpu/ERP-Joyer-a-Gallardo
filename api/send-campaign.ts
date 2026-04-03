@@ -100,9 +100,7 @@ export default async function handler(req: any, res: any) {
     }
 
     // 5. Build dynamic parameters mapping
-    // We try to understand if template BODY needs a param
-    const bodyComponent = templateData.components?.find((c: any) => c.type === 'BODY');
-    const needsParam = bodyComponent && bodyComponent.text && bodyComponent.text.includes('{{1}}');
+    // (Logic moved inside loop)
 
     // 6. Loop and dispatch
     let sentCount = 0;
@@ -126,22 +124,42 @@ export default async function handler(req: any, res: any) {
         name: templateData.name,
         language: {
           code: templateData.language || 'es'
-        }
+        },
+        components: []
       };
 
-      // Add dynamic variable if needed (Injecting customer's name)
-      if (needsParam) {
-        templatePayload.components = [
-          {
+      // 1. Analyze and inject HEADER parameters if needed
+      const headerComponent = templateData.components?.find((c: any) => c.type === 'HEADER');
+      if (headerComponent && headerComponent.format === 'IMAGE') {
+        const defaultImg = "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?q=80&w=600&auto=format&fit=crop";
+        const sampleUrl = headerComponent.example?.header_handle?.[0] || defaultImg;
+        templatePayload.components.push({
+          type: "header",
+          parameters: [{ type: "image", image: { link: sampleUrl } }]
+        });
+      }
+
+      // 2. Analyze and inject BODY parameters
+      const bodyComponent = templateData.components?.find((c: any) => c.type === 'BODY');
+      if (bodyComponent && bodyComponent.text) {
+        // Count how many {{n}} variables exist in the string
+        const varMatches = bodyComponent.text.match(/\{\{\d+\}\}/g);
+        if (varMatches && varMatches.length > 0) {
+          const bodyParams = varMatches.map((match: string, i: number) => {
+            if (i === 0) return { type: "text", text: customer.name || "Apreciable Cliente" };
+            if (i === 1) return { type: "text", text: "Joyería Gallardo" };
+            return { type: "text", text: "Detalles especiales" };
+          });
+          templatePayload.components.push({
             type: "body",
-            parameters: [
-              {
-                type: "text",
-                text: customer.name || "Cliente"
-              }
-            ]
-          }
-        ];
+            parameters: bodyParams
+          });
+        }
+      }
+
+      // If no components needed parameters, we must delete the empty array to avoid syntax errors
+      if (templatePayload.components.length === 0) {
+        delete templatePayload.components;
       }
 
       const metaRequest = {
