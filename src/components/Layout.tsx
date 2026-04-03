@@ -1,4 +1,6 @@
+import { ReactNode } from 'react';
 import { Users, Package, ShoppingCart, Settings, LayoutDashboard, Trello, Megaphone, FileText, LogOut, User, Globe } from 'lucide-react';
+import { PermissionsMap, canAccessModule, ModuleId } from '../lib/permissions';
 
 interface CurrentUser {
   id: string;
@@ -15,10 +17,11 @@ type LayoutProps = {
   onModuleChange: (module: 'dashboard' | 'crm' | 'inventory' | 'sales' | 'config' | 'kanban' | 'marketing' | 'quotes' | 'ecommerce') => void;
   currentUser: CurrentUser;
   onLogout: () => void;
+  permissions: PermissionsMap;
 };
 
-export default function Layout({ children, currentModule, onModuleChange, currentUser, onLogout }: LayoutProps) {
-  const modules = [
+export default function Layout({ children, currentModule, onModuleChange, currentUser, onLogout, permissions }: LayoutProps) {
+  const allModules = [
     { id: 'dashboard' as const, name: 'Dashboard', icon: LayoutDashboard },
     { id: 'crm' as const, name: 'CRM', icon: Users },
     { id: 'kanban' as const, name: 'Pipeline', icon: Trello },
@@ -29,6 +32,9 @@ export default function Layout({ children, currentModule, onModuleChange, curren
     { id: 'marketing' as const, name: 'Marketing', icon: Megaphone },
     { id: 'config' as const, name: 'Configuración', icon: Settings },
   ];
+
+  // Filter modules by permission
+  const modules = allModules.filter(m => canAccessModule(permissions, m.id as ModuleId));
 
   const getRoleBadgeColor = (role: string) => {
     switch (role) {

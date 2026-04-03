@@ -11,6 +11,7 @@ import QuotesModule from './components/modules/QuotesModule';
 import ConfigModule from './components/modules/ConfigModule';
 import MarketingModule from './components/modules/MarketingModule';
 import { EcommerceDashboard } from './pages/EcommerceDashboard';
+import { PermissionsMap, getDefaultPermissions, mergePermissions, loadUserPermissions, getModulePermissions } from './lib/permissions';
 
 interface CurrentUser {
   id: string;
@@ -35,7 +36,17 @@ function App() {
     return 'dashboard';
   });
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [userPermissions, setUserPermissions] = useState<PermissionsMap>(getDefaultPermissions('cajero'));
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
+  // Load permissions when user changes
+  useEffect(() => {
+    if (currentUser) {
+      loadUserPermissions(currentUser.id).then(overrides => {
+        setUserPermissions(mergePermissions(currentUser.role, overrides || undefined));
+      });
+    }
+  }, [currentUser]);
 
   useEffect(() => {
     const stored = localStorage.getItem('current_user');
@@ -82,14 +93,15 @@ function App() {
         onModuleChange={setCurrentModule}
         currentUser={currentUser}
         onLogout={handleLogout}
+        permissions={userPermissions}
       >
         {currentModule === 'dashboard' && <Dashboard currentUser={currentUser} />}
-        {currentModule === 'crm' && <CRMModule currentUser={currentUser} />}
+        {currentModule === 'crm' && <CRMModule currentUser={currentUser} permissions={getModulePermissions(userPermissions, 'crm')} />}
         {currentModule === 'kanban' && <KanbanModule currentUser={currentUser} />}
-        {currentModule === 'inventory' && <InventoryModule currentUser={currentUser} />}
-        {currentModule === 'sales' && <SalesModule currentUser={currentUser} />}
+        {currentModule === 'inventory' && <InventoryModule currentUser={currentUser} permissions={getModulePermissions(userPermissions, 'inventory')} />}
+        {currentModule === 'sales' && <SalesModule currentUser={currentUser} permissions={getModulePermissions(userPermissions, 'sales')} />}
         {currentModule === 'quotes' && <QuotesModule currentUser={currentUser} />}
-        {currentModule === 'marketing' && <MarketingModule currentUser={currentUser} />}
+        {currentModule === 'marketing' && <MarketingModule />}
         {currentModule === 'ecommerce' && <EcommerceDashboard />}
         {currentModule === 'config' && <ConfigModule currentUser={currentUser} />}
       </Layout>

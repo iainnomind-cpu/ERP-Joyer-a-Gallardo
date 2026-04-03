@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase, Product, StockAlert } from '../../lib/supabase';
 import { Package, Search, AlertCircle, Plus, TrendingDown, Edit2, Save, X, History, Printer, Wand2, Clock, ArrowUpCircle, ArrowDownCircle, Activity, Trash2, Edit } from 'lucide-react';
+import { ModulePermissions } from '../../lib/permissions';
 
 interface CurrentUser {
   id: string;
@@ -13,9 +14,13 @@ interface CurrentUser {
 
 interface InventoryModuleProps {
   currentUser: CurrentUser | null;
+  permissions?: ModulePermissions;
 }
 
-export default function InventoryModule({ currentUser }: InventoryModuleProps) {
+export default function InventoryModule({ currentUser, permissions }: InventoryModuleProps) {
+  const canCreate = permissions?.create ?? true;
+  const canEdit = permissions?.edit ?? true;
+  const canDelete = permissions?.delete ?? true;
   const getUserName = () => currentUser?.full_name || 'Sistema';
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
@@ -697,13 +702,15 @@ export default function InventoryModule({ currentUser }: InventoryModuleProps) {
           <h2 className="text-2xl font-bold text-gray-900">Módulo de Inventario</h2>
           <p className="text-gray-600 mt-1">Control de existencias y catálogo digital</p>
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center space-x-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Nuevo Producto</span>
-        </button>
+        {canCreate && (
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center space-x-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Nuevo Producto</span>
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -956,23 +963,27 @@ export default function InventoryModule({ currentUser }: InventoryModuleProps) {
                         </div>
                       ) : (
                         <div className="flex space-x-2">
-                          <button
-                            onClick={() => openEditModal(product)}
-                            className="text-blue-600 hover:text-blue-800"
-                            title="Editar producto"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              setEditingProduct(product.id);
-                              setStockEditValues({ a: product.stock_a, b: product.stock_b, c: product.stock_c });
-                            }}
-                            className="text-amber-600 hover:text-amber-800"
-                            title="Editar stock"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
+                          {canEdit && (
+                            <button
+                              onClick={() => openEditModal(product)}
+                              className="text-blue-600 hover:text-blue-800"
+                              title="Editar producto"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                          )}
+                          {canEdit && (
+                            <button
+                              onClick={() => {
+                                setEditingProduct(product.id);
+                                setStockEditValues({ a: product.stock_a, b: product.stock_b, c: product.stock_c });
+                              }}
+                              className="text-amber-600 hover:text-amber-800"
+                              title="Editar stock"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
                             onClick={() => {
                               setShowMovementsModal(product);
@@ -990,13 +1001,15 @@ export default function InventoryModule({ currentUser }: InventoryModuleProps) {
                           >
                             <Printer className="w-4 h-4" />
                           </button>
-                          <button
-                            onClick={() => handleDeleteProduct(product)}
-                            className="text-red-600 hover:text-red-800"
-                            title="Eliminar producto"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {canDelete && (
+                            <button
+                              onClick={() => handleDeleteProduct(product)}
+                              className="text-red-600 hover:text-red-800"
+                              title="Eliminar producto"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       )}
                     </td>

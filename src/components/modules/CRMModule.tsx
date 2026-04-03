@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase, Customer, ChurnAlert, CreditTransaction } from '../../lib/supabase';
 import { UserPlus, Search, AlertTriangle, TrendingUp, Users, Phone, Edit2, Trash2, CreditCard, DollarSign, History, Plus, Minus, RefreshCw } from 'lucide-react';
+import { ModulePermissions } from '../../lib/permissions';
 
 interface CurrentUser {
   id: string;
@@ -13,9 +14,13 @@ interface CurrentUser {
 
 interface CRMModuleProps {
   currentUser: CurrentUser | null;
+  permissions?: ModulePermissions;
 }
 
-export default function CRMModule({ currentUser }: CRMModuleProps) {
+export default function CRMModule({ currentUser, permissions }: CRMModuleProps) {
+  const canCreate = permissions?.create ?? true;
+  const canEdit = permissions?.edit ?? true;
+  const canDelete = permissions?.delete ?? true;
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [churnAlerts, setChurnAlerts] = useState<ChurnAlert[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -329,13 +334,15 @@ export default function CRMModule({ currentUser }: CRMModuleProps) {
           <h2 className="text-2xl font-bold text-gray-900">Módulo CRM</h2>
           <p className="text-gray-600 mt-1">Gestión centralizada de clientes, relaciones y líneas de crédito</p>
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center space-x-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
-        >
-          <UserPlus className="w-4 h-4" />
-          <span>Nuevo Cliente</span>
-        </button>
+        {canCreate && (
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center space-x-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Nuevo Cliente</span>
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -568,13 +575,15 @@ export default function CRMModule({ currentUser }: CRMModuleProps) {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center space-x-2">
-                          <button
-                            onClick={() => openEditModal(customer)}
-                            className="text-blue-600 hover:text-blue-800 transition-colors"
-                            title="Editar cliente"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
+                          {canEdit && (
+                            <button
+                              onClick={() => openEditModal(customer)}
+                              className="text-blue-600 hover:text-blue-800 transition-colors"
+                              title="Editar cliente"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                          )}
                           {customer.credit_limit > 0 && (
                             <>
                               <button
@@ -593,13 +602,15 @@ export default function CRMModule({ currentUser }: CRMModuleProps) {
                               </button>
                             </>
                           )}
-                          <button
-                            onClick={() => handleDeleteCustomer(customer)}
-                            className="text-red-600 hover:text-red-800 transition-colors"
-                            title="Eliminar cliente"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {canDelete && (
+                            <button
+                              onClick={() => handleDeleteCustomer(customer)}
+                              className="text-red-600 hover:text-red-800 transition-colors"
+                              title="Eliminar cliente"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

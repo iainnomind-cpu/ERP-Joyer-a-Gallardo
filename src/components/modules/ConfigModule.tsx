@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase, BusinessRule, User } from '../../lib/supabase';
-import { Settings, DollarSign, AlertCircle, Save, Edit2, X, Users, Plus, Check } from 'lucide-react';
+import { Settings, DollarSign, AlertCircle, Save, Edit2, X, Users, Plus, Check, Shield } from 'lucide-react';
+import { PermissionsMap, ModulePermissions, getDefaultPermissions, mergePermissions, loadUserPermissions, saveUserPermissions, ALL_MODULES, MODULE_LABELS, RoleId } from '../../lib/permissions';
 
 interface ConfigModuleProps {
   currentUser: User | null;
@@ -668,6 +669,77 @@ export default function ConfigModule({ currentUser }: ConfigModuleProps) {
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Permissions Panel */}
+      <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center space-x-3">
+            <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
+              <Shield className="w-6 h-6 text-indigo-600" />
+            </div>
+            <div>
+              <h3 className="font-bold text-gray-900">Permisos por Rol</h3>
+              <p className="text-sm text-gray-600">Matriz de acceso por módulo y acción</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase text-xs">Módulo</th>
+                {(['admin','vendedor','cajero'] as RoleId[]).map(role => (
+                  <th key={role} colSpan={4} className="px-2 py-3 text-center font-medium text-gray-500 uppercase text-xs border-l border-gray-200">
+                    {role === 'admin' ? 'Administrador' : role === 'vendedor' ? 'Vendedor' : 'Cajero'}
+                  </th>
+                ))}
+              </tr>
+              <tr className="border-t border-gray-200">
+                <th className="px-4 py-2"></th>
+                {(['admin','vendedor','cajero'] as RoleId[]).map(role => (
+                  <React.Fragment key={`hdr-${role}`}>
+                    <th className="px-1 py-2 text-center text-xs text-gray-400 border-l border-gray-200">Ver</th>
+                    <th className="px-1 py-2 text-center text-xs text-gray-400">Crear</th>
+                    <th className="px-1 py-2 text-center text-xs text-gray-400">Editar</th>
+                    <th className="px-1 py-2 text-center text-xs text-gray-400">Borrar</th>
+                  </React.Fragment>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {ALL_MODULES.map(mod => (
+                <tr key={mod} className="hover:bg-gray-50">
+                  <td className="px-4 py-2.5 font-medium text-gray-800">{MODULE_LABELS[mod]}</td>
+                  {(['admin','vendedor','cajero'] as RoleId[]).map(role => {
+                    const perms = getDefaultPermissions(role)[mod];
+                    return (
+                      <React.Fragment key={`${role}-${mod}`}>
+                        {(['view','create','edit','delete'] as (keyof ModulePermissions)[]).map((action, idx) => (
+                          <td key={`${role}-${mod}-${action}`} className={`px-1 py-2.5 text-center ${idx === 0 ? 'border-l border-gray-200' : ''}`}>
+                            {perms[action] ? (
+                              <span className="inline-block w-5 h-5 rounded-full bg-green-100 text-green-600 leading-5 text-xs font-bold">✓</span>
+                            ) : (
+                              <span className="inline-block w-5 h-5 rounded-full bg-red-50 text-red-300 leading-5 text-xs">✕</span>
+                            )}
+                          </td>
+                        ))}
+                      </React.Fragment>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="mt-4 bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+          <p className="text-sm text-indigo-800">
+            <span className="font-semibold">Nota:</span> Estos son los permisos predeterminados por rol.
+            Los cambios se aplican en tiempo real al recargar la sesión del usuario.
+          </p>
         </div>
       </div>
 

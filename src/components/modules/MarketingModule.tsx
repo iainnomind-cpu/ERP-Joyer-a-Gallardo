@@ -668,13 +668,10 @@ export default function MarketingModule() {
                     <select
                       value={newCampaign.channel}
                       onChange={(e) => setNewCampaign({ ...newCampaign, channel: e.target.value })}
-                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-slate-50 cursor-not-allowed text-slate-500"
+                      disabled
                     >
                       <option value="whatsapp">WhatsApp</option>
-                      <option value="sms">SMS</option>
-                      <option value="email">Email</option>
-                      <option value="push">Push Notification</option>
-                      <option value="multi">Multi-canal</option>
                     </select>
                   </div>
                 </div>
