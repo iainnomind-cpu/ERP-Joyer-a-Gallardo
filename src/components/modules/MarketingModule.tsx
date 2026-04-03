@@ -83,12 +83,10 @@ export default function MarketingModule() {
     name: '',
     description: '',
     filters: {
-      material_preference: '',
-      min_purchases: '',
-      max_purchases: '',
-      last_purchase_days: '',
-      segment: ''
-    }
+      customerType: 'all',
+      activity: 'all',
+      material: 'all'
+    } as Record<string, string>
   });
 
   useEffect(() => {
@@ -168,11 +166,9 @@ export default function MarketingModule() {
           name: '',
           description: '',
           filters: {
-            material_preference: '',
-            min_purchases: '',
-            max_purchases: '',
-            last_purchase_days: '',
-            segment: ''
+            customerType: 'all',
+            activity: 'all',
+            material: 'all'
           }
         });
         loadData();
@@ -564,89 +560,71 @@ export default function MarketingModule() {
                   <label className="block text-sm font-medium text-slate-700 mb-2">Descripción</label>
                   <textarea
                     value={newSegment.description}
-                    onChange={(e) => setNewSegment({ ...newSegment, description: e.target.value })}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     rows={2}
                     placeholder="Describe este segmento"
                   />
                 </div>
+                <div className="bg-slate-50 rounded-lg p-5 border border-slate-200">
+                  <h3 className="font-semibold text-slate-900 mb-5">Perfiles de Segmentación Rápida</h3>
 
-                <div className="bg-slate-50 rounded-lg p-4">
-                  <h3 className="font-semibold text-slate-900 mb-4">Filtros de Segmentación</h3>
-
-                  <div className="space-y-3">
+                  <div className="space-y-6">
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">Preferencia de Material</label>
-                      <select
-                        value={newSegment.filters.material_preference}
-                        onChange={(e) => setNewSegment({
-                          ...newSegment,
-                          filters: { ...newSegment.filters, material_preference: e.target.value }
-                        })}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                      >
-                        <option value="">Cualquiera</option>
-                        <option value="Plata Pura">Plata Pura</option>
-                        <option value="Baño de Oro">Baño de Oro</option>
-                        <option value="Ambos">Ambos</option>
-                      </select>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Compras Mínimas</label>
-                        <input
-                          type="number"
-                          value={newSegment.filters.min_purchases}
-                          onChange={(e) => setNewSegment({
-                            ...newSegment,
-                            filters: { ...newSegment.filters, min_purchases: e.target.value }
-                          })}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                          placeholder="0"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Compras Máximas</label>
-                        <input
-                          type="number"
-                          value={newSegment.filters.max_purchases}
-                          onChange={(e) => setNewSegment({
-                            ...newSegment,
-                            filters: { ...newSegment.filters, max_purchases: e.target.value }
-                          })}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                          placeholder="999"
-                        />
+                      <label className="block text-sm font-medium text-slate-700 mb-2">1. Volumen de Compras</label>
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { id: 'all', label: 'Cualquiera' },
+                          { id: 'new', label: 'Nuevos (0-1)' },
+                          { id: 'frequent', label: 'Frecuentes (2-5)' },
+                          { id: 'vip', label: 'VIP (> 5)' }
+                        ].map(opt => (
+                          <button
+                            key={opt.id}
+                            onClick={() => setNewSegment({ ...newSegment, filters: { ...newSegment.filters, customerType: opt.id } })}
+                            className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors border shadow-sm ${newSegment.filters.customerType === opt.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'}`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">Días desde última compra</label>
-                      <input
-                        type="number"
-                        value={newSegment.filters.last_purchase_days}
-                        onChange={(e) => setNewSegment({
-                          ...newSegment,
-                          filters: { ...newSegment.filters, last_purchase_days: e.target.value }
-                        })}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                        placeholder="Ej: 30 (clientes activos en los últimos 30 días)"
-                      />
+                      <label className="block text-sm font-medium text-slate-700 mb-2">2. Nivel de Actividad</label>
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { id: 'all', label: 'Cualquiera' },
+                          { id: 'recent', label: 'Recientes (-30d)' },
+                          { id: 'inactive', label: 'Inactivos (+90d sin comprar)' }
+                        ].map(opt => (
+                          <button
+                            key={opt.id}
+                            onClick={() => setNewSegment({ ...newSegment, filters: { ...newSegment.filters, activity: opt.id } })}
+                            className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors border shadow-sm ${newSegment.filters.activity === opt.id ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'}`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">Segmento Específico</label>
-                      <input
-                        type="text"
-                        value={newSegment.filters.segment}
-                        onChange={(e) => setNewSegment({
-                          ...newSegment,
-                          filters: { ...newSegment.filters, segment: e.target.value }
-                        })}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                        placeholder="VIP, Regular, etc."
-                      />
+                      <label className="block text-sm font-medium text-slate-700 mb-2">3. Interés Primario</label>
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { id: 'all', label: 'Todas las Joyas' },
+                          { id: 'oro', label: 'Compradores de Oro' },
+                          { id: 'plata', label: 'Compradores de Plata' }
+                        ].map(opt => (
+                          <button
+                            key={opt.id}
+                            onClick={() => setNewSegment({ ...newSegment, filters: { ...newSegment.filters, material: opt.id } })}
+                            className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors border shadow-sm ${newSegment.filters.material === opt.id ? 'bg-[#D4AF37] text-white border-[#D4AF37]' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'}`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
