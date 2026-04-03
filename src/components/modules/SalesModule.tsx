@@ -4,7 +4,7 @@ import {
   ShoppingCart, Plus, FileText, DollarSign, Calendar, Eye, X,
   Scan, Printer, CreditCard, Banknote, Smartphone, Link as LinkIcon,
   AlertCircle, Check, TrendingUp, Monitor, Lock, Bell,
-  ArrowDownCircle, ArrowUpCircle, History, Receipt, Minus
+  ArrowDownCircle, ArrowUpCircle, History, Receipt, Minus, Trash2
 } from 'lucide-react';
 import { ModulePermissions } from '../../lib/permissions';
 
