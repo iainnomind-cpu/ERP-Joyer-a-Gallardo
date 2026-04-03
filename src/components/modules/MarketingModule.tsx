@@ -11,12 +11,12 @@ import {
   Play,
   Pause,
   BarChart3,
-  Zap,
-  Settings,
   Target,
   Mail,
   Phone,
-  Bell
+  Bell,
+  Trash2,
+  Edit
 } from 'lucide-react';
 import WhatsAppTemplateBuilder from './WhatsAppTemplateBuilder';
 
@@ -68,6 +68,8 @@ export default function MarketingModule() {
   const [whatsappTemplates, setWhatsappTemplates] = useState<any[]>([]);
   const [showCampaignModal, setShowCampaignModal] = useState(false);
   const [showSegmentModal, setShowSegmentModal] = useState(false);
+  const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null);
+  const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [newCampaign, setNewCampaign] = useState({
@@ -136,26 +138,57 @@ export default function MarketingModule() {
         scheduled_date: newCampaign.scheduled_date || null
       };
 
-      const { error } = await supabase
-        .from('marketing_campaigns')
-        .insert([payload]);
-
-      if (!error) {
-        setShowCampaignModal(false);
-        setNewCampaign({
-          name: '',
-          description: '',
-          type: 'promotional',
-          channel: 'whatsapp',
-          template_id: '',
-          segment_id: '',
-          scheduled_date: '',
-        });
-        loadData();
+      if (editingCampaignId) {
+        const { error } = await supabase.from('marketing_campaigns').update(payload).eq('id', editingCampaignId);
+        if (!error) {
+          setShowCampaignModal(false);
+          setEditingCampaignId(null);
+          resetCampaignForm();
+          loadData();
+        }
+      } else {
+        const { error } = await supabase.from('marketing_campaigns').insert([payload]);
+        if (!error) {
+          setShowCampaignModal(false);
+          resetCampaignForm();
+          loadData();
+        }
       }
     } catch (error) {
       console.error('Error creating campaign:', error);
     }
+  };
+
+  const resetCampaignForm = () => {
+    setNewCampaign({
+      name: '',
+      description: '',
+      type: 'promotional',
+      channel: 'whatsapp',
+      template_id: '',
+      segment_id: '',
+      scheduled_date: '',
+    });
+  };
+
+  const handleEditCampaign = (campaign: Campaign) => {
+    setEditingCampaignId(campaign.id);
+    setNewCampaign({
+      name: campaign.name,
+      description: campaign.description || '',
+      type: campaign.type,
+      channel: campaign.channel,
+      template_id: whatsappTemplates.find(t => t.name === campaign.message_template)?.id || campaign.message_template,
+      segment_id: (campaign.target_segment as any)?.id || '',
+      scheduled_date: campaign.scheduled_date ? new Date(campaign.scheduled_date).toISOString().slice(0,16) : '',
+    });
+    setShowCampaignModal(true);
+  };
+
+  const handleDeleteCampaign = async (id: string) => {
+    if (!window.confirm('¿Eliminar campaña definitivamente?')) return;
+    await supabase.from('marketing_campaigns').delete().eq('id', id);
+    loadData();
   };
 
   const createSegment = async () => {
@@ -164,30 +197,55 @@ export default function MarketingModule() {
         Object.entries(newSegment.filters).filter(([_, v]) => v !== '')
       );
 
-      const { error } = await supabase
-        .from('marketing_segments')
-        .insert([{
-          name: newSegment.name,
-          description: newSegment.description,
-          filters: cleanFilters
-        }]);
+      const payload = {
+        name: newSegment.name,
+        description: newSegment.description,
+        filters: cleanFilters
+      };
 
-      if (!error) {
-        setShowSegmentModal(false);
-        setNewSegment({
-          name: '',
-          description: '',
-          filters: {
-            customerType: 'all',
-            activity: 'all',
-            material: 'all'
-          }
-        });
-        loadData();
+      if (editingSegmentId) {
+        const { error } = await supabase.from('marketing_segments').update(payload).eq('id', editingSegmentId);
+        if (!error) {
+          setShowSegmentModal(false);
+          setEditingSegmentId(null);
+          resetSegmentForm();
+          loadData();
+        }
+      } else {
+        const { error } = await supabase.from('marketing_segments').insert([payload]);
+        if (!error) {
+          setShowSegmentModal(false);
+          resetSegmentForm();
+          loadData();
+        }
       }
     } catch (error) {
       console.error('Error creating segment:', error);
     }
+  };
+
+  const resetSegmentForm = () => {
+    setNewSegment({
+      name: '',
+      description: '',
+      filters: { customerType: 'all', activity: 'all', material: 'all' }
+    });
+  };
+
+  const handleEditSegment = (segment: Segment) => {
+    setEditingSegmentId(segment.id);
+    setNewSegment({
+      name: segment.name,
+      description: segment.description || '',
+      filters: (segment.filters as any) || { customerType: 'all', activity: 'all', material: 'all' }
+    });
+    setShowSegmentModal(true);
+  };
+
+  const handleDeleteSegment = async (id: string) => {
+    if (!window.confirm('¿Eliminar segmento definitivamente?')) return;
+    await supabase.from('marketing_segments').delete().eq('id', id);
+    loadData();
   };
 
   const toggleCampaignStatus = async (campaignId: string, currentStatus: string) => {
@@ -231,7 +289,7 @@ export default function MarketingModule() {
             <div className="flex gap-3">
               {activeTab === 'campaigns' && (
                 <button
-                  onClick={() => setShowCampaignModal(true)}
+                  onClick={() => { setEditingCampaignId(null); resetCampaignForm(); setShowCampaignModal(true); }}
                   className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
                 >
                   <Plus className="w-4 h-4" />
@@ -240,7 +298,7 @@ export default function MarketingModule() {
               )}
               {activeTab === 'segments' && (
                 <button
-                  onClick={() => setShowSegmentModal(true)}
+                  onClick={() => { setEditingSegmentId(null); resetSegmentForm(); setShowSegmentModal(true); }}
                   className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
                 >
                   <Plus className="w-4 h-4" />
@@ -375,16 +433,33 @@ export default function MarketingModule() {
                         </div>
                       </div>
                     </div>
-                    <button
-                      onClick={() => toggleCampaignStatus(campaign.id, campaign.status)}
-                      className="ml-4 p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                    >
-                      {campaign.status === 'active' ? (
-                        <Pause className="w-5 h-5 text-slate-600" />
-                      ) : (
-                        <Play className="w-5 h-5 text-slate-600" />
-                      )}
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleEditCampaign(campaign)}
+                        className="p-2 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200"
+                        title="Editar Campaña"
+                      >
+                        <Edit className="w-5 h-5 text-slate-600" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCampaign(campaign.id)}
+                        className="p-2 bg-red-50 hover:bg-red-100 rounded-lg transition-colors border border-red-200"
+                        title="Eliminar Campaña"
+                      >
+                        <Trash2 className="w-5 h-5 text-red-500" />
+                      </button>
+                      <button
+                        onClick={() => toggleCampaignStatus(campaign.id, campaign.status)}
+                        className="p-2 ml-2 hover:bg-slate-100 rounded-lg transition-colors border border-transparent hover:border-slate-200"
+                        title={campaign.status === 'active' ? 'Pausar envío' : 'Reanudar envío'}
+                      >
+                        {campaign.status === 'active' ? (
+                          <Pause className="w-5 h-5 text-slate-600" />
+                        ) : (
+                          <Play className="w-5 h-5 text-slate-600" />
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))
@@ -427,6 +502,22 @@ export default function MarketingModule() {
                           {Object.keys(segment.filters).length} filtros aplicados
                         </div>
                       </div>
+                    </div>
+                    <div className="flex gap-2">
+                       <button
+                         onClick={() => handleEditSegment(segment)}
+                         className="p-2 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200"
+                         title="Editar Segmento"
+                       >
+                         <Edit className="w-4 h-4 text-slate-600" />
+                       </button>
+                       <button
+                         onClick={() => handleDeleteSegment(segment.id)}
+                         className="p-2 bg-red-50 hover:bg-red-100 rounded-lg transition-colors border border-red-200"
+                         title="Eliminar Segmento"
+                       >
+                         <Trash2 className="w-4 h-4 text-red-500" />
+                       </button>
                     </div>
                   </div>
                 </div>
