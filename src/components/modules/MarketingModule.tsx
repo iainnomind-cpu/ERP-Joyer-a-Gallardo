@@ -194,13 +194,36 @@ export default function MarketingModule() {
   const createSegment = async () => {
     try {
       const cleanFilters = Object.fromEntries(
-        Object.entries(newSegment.filters).filter(([_, v]) => v !== '')
+        Object.entries(newSegment.filters).filter(([_, v]) => v !== '' && v !== 'all')
       );
+
+      // Calculate the customer_count dynamically based on current rules
+      let q = supabase.from('customers').select('id', { count: 'exact', head: true });
+
+      if (cleanFilters.customerType === 'new') q = q.lte('total_purchases', 1);
+      if (cleanFilters.customerType === 'frequent') q = q.gte('total_purchases', 2).lte('total_purchases', 5);
+      if (cleanFilters.customerType === 'vip') q = q.gt('total_purchases', 5);
+
+      if (cleanFilters.activity === 'recent') {
+        const thirty = new Date(); thirty.setDate(thirty.getDate() - 30);
+        q = q.gte('last_purchase_date', thirty.toISOString());
+      }
+      if (cleanFilters.activity === 'inactive') {
+        const ninety = new Date(); ninety.setDate(ninety.getDate() - 90);
+        // also consider those with no purchase date yet inactive? 
+        q = q.lte('last_purchase_date', ninety.toISOString());
+      }
+
+      if (cleanFilters.material === 'oro') q = q.ilike('material_preference', '%Oro%');
+      if (cleanFilters.material === 'plata') q = q.ilike('material_preference', '%Plata%');
+
+      const { count } = await q;
 
       const payload = {
         name: newSegment.name,
         description: newSegment.description,
-        filters: cleanFilters
+        filters: cleanFilters,
+        customer_count: count || 0
       };
 
       if (editingSegmentId) {
