@@ -1085,11 +1085,26 @@ export default function InventoryModule({ currentUser }: InventoryModuleProps) {
                 </div>
                 <div>
                   <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Categoría</label>
-                  <input
-                    type="text"
-                    name="category"
-                    className="w-full px-2 sm:px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                  />
+                  <div className="flex space-x-2">
+                    <select
+                      name="category"
+                      defaultValue=""
+                      className="w-full px-2 sm:px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent flex-1"
+                    >
+                      <option value="">Seleccione o escriba...</option>
+                      {categories.map(cat => (
+                        <option key={cat.id} value={cat.name}>{cat.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={handleAddCategory}
+                      className="p-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200"
+                      title="Nueva Categoría"
+                    >
+                      <Plus className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
               </div>
 
