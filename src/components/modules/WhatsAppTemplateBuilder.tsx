@@ -1,11 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { MessageSquare, Plus, RefreshCw, Send, CheckCircle, AlertCircle, Clock, X, Trash2 } from 'lucide-react';
+import { MessageSquare, Plus, RefreshCw, Send, CheckCircle, AlertCircle, Clock, X, Trash2, Filter, LinkIcon, ImageIcon } from 'lucide-react';
+
+interface WhatsAppButton {
+  type: string;
+  text: string;
+  url?: string;
+}
 
 interface TemplateComponent {
   type: string;
   text?: string;
   format?: string;
+  example?: any;
+  buttons?: WhatsAppButton[];
 }
 
 interface WhatsAppTemplate {
@@ -24,14 +32,18 @@ export default function WhatsAppTemplateBuilder() {
   const [loading, setLoading] = useState(true);
   const [showCreator, setShowCreator] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState('ALL');
   const textAreaRef = React.useRef<HTMLTextAreaElement>(null);
 
   // Form states
   const [name, setName] = useState('');
   const [category, setCategory] = useState('MARKETING');
   const [language, setLanguage] = useState('es_MX');
-  const [bodyText, setBodyText] = useState('Hola {{1}}, gracias por tu compra en Gallardo Joyas.');
+  const [headerImageUrl, setHeaderImageUrl] = useState('');
+  const [bodyText, setBodyText] = useState('Hola [Nombre], gracias por tu compra en Gallardo Joyas.');
+  const [buttonsList, setButtonsList] = useState<WhatsAppButton[]>([]);
 
   useEffect(() => {
     loadTemplates();
@@ -128,9 +140,19 @@ export default function WhatsAppTemplateBuilder() {
       const matches = bodyText.match(/\[[^\]]+\]/g) || [];
       const uniqueVars = Array.from(new Set(matches));
 
-      const components: any[] = [
-        { type: 'BODY', text: finalMetaText, format: bodyText }
-      ];
+      const components: any[] = [];
+
+      if (headerImageUrl.trim()) {
+        components.push({
+          type: 'HEADER',
+          format: 'IMAGE',
+          example: {
+            header_url: [headerImageUrl.trim()]
+          }
+        });
+      }
+
+      const bodyComponent: any = { type: 'BODY', text: finalMetaText, format: bodyText };
 
       if (uniqueVars.length > 0) {
         const dummyDataMap: Record<string, string> = {
@@ -143,7 +165,7 @@ export default function WhatsAppTemplateBuilder() {
           'Vendedor': 'María'
         };
 
-        components[0].example = {
+        bodyComponent.example = {
           body_text: [
             uniqueVars.map(v => {
               const baseVar = v.replace(/[\[\]]/g, '');
@@ -151,6 +173,19 @@ export default function WhatsAppTemplateBuilder() {
             })
           ]
         };
+      }
+
+      components.push(bodyComponent);
+
+      if (buttonsList.length > 0) {
+        components.push({
+          type: 'BUTTONS',
+          buttons: buttonsList.map(b => ({
+            type: b.type,
+            text: b.text,
+            ...(b.type === 'URL' ? { url: b.url } : {})
+          }))
+        });
       }
 
       let savedTemplateId = editingId;
@@ -239,6 +274,8 @@ export default function WhatsAppTemplateBuilder() {
     setShowCreator(false);
     setEditingId(null);
     setName('');
+    setHeaderImageUrl('');
+    setButtonsList([]);
     setBodyText('Hola [Nombre], ');
   };
 
@@ -251,6 +288,20 @@ export default function WhatsAppTemplateBuilder() {
     const bodyComp = tpl.components.find(c => c.type === 'BODY');
     if (bodyComp) {
       setBodyText(bodyComp.format || bodyComp.text || '');
+    }
+
+    const headerComp = tpl.components.find(c => c.type === 'HEADER');
+    if (headerComp && headerComp.example && headerComp.example.header_url) {
+      setHeaderImageUrl(headerComp.example.header_url[0] || '');
+    } else {
+      setHeaderImageUrl('');
+    }
+
+    const buttonsComp = tpl.components.find(c => c.type === 'BUTTONS');
+    if (buttonsComp && buttonsComp.buttons) {
+      setButtonsList(buttonsComp.buttons);
+    } else {
+      setButtonsList([]);
     }
     
     setShowCreator(true);
@@ -270,6 +321,43 @@ export default function WhatsAppTemplateBuilder() {
     }
   };
 
+  const syncStatuses = async () => {
+    setSyncing(true);
+    try {
+      const baseUrl = window.location.origin;
+      const res = await fetch(`${baseUrl}/api/meta-templates`);
+      const payload = await res.json();
+      
+      if (!res.ok) throw new Error(payload.error || "Error al conectar con Meta");
+      if (!payload.data) throw new Error("Format error: No se obtuvo la lista de datos desde Meta");
+
+      const metaTemplates = payload.data;
+      let updatedCount = 0;
+
+      const updatePromises = templates.map(async (localTpl) => {
+         const remoteTpl = metaTemplates.find((rt: any) => rt.name === localTpl.name);
+         if (remoteTpl && remoteTpl.status !== localTpl.status) {
+            await supabase.from('whatsapp_templates').update({
+              status: remoteTpl.status,
+              rejection_reason: remoteTpl.rejected_reason || null
+            }).eq('id', localTpl.id);
+            updatedCount++;
+            return true;
+         }
+         return false;
+      });
+
+      await Promise.all(updatePromises);
+      await loadTemplates();
+      alert(`Sincronización completa con Meta. Se actualizaron ${updatedCount} plantillas.`);
+    } catch (e: any) {
+       console.error("Sync error:", e);
+       alert("Error al sincronizar: " + e.message);
+    } finally {
+       setSyncing(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
 
@@ -280,18 +368,45 @@ export default function WhatsAppTemplateBuilder() {
               <h2 className="text-xl font-bold text-slate-800">Plantillas de WhatsApp</h2>
               <p className="text-sm text-slate-500">Diseña y solicita aprobación a Meta para tus mensajes automáticos.</p>
             </div>
-            <button
-              onClick={() => {
-                setEditingId(null);
-                setName('');
-                setBodyText('Hola [Nombre], ');
-                setShowCreator(true);
-              }}
-              className="flex items-center gap-2 bg-[#25D366] text-white px-4 py-2 rounded-lg hover:bg-[#1DA851] transition-colors"
-            >
-              <Plus className="w-5 h-5" />
-              Nueva Plantilla
-            </button>
+            <div className="flex gap-3">
+              <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                <Filter className="w-4 h-4 text-slate-400 mr-2" />
+                <select 
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="bg-transparent border-none text-sm font-medium text-slate-700 focus:ring-0 cursor-pointer outline-none"
+                >
+                  <option value="ALL">Todos los estados</option>
+                  <option value="APPROVED">Aprobadas</option>
+                  <option value="IN_REVIEW">En Revisión</option>
+                  <option value="DRAFT">Borradores</option>
+                  <option value="REJECTED">Rechazadas</option>
+                </select>
+              </div>
+
+              <button
+                onClick={syncStatuses}
+                disabled={syncing}
+                className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
+                title="Sincronizar estados con Meta"
+              >
+                <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+                Sincronizar
+              </button>
+
+              <button
+                onClick={() => {
+                  setEditingId(null);
+                  setName('');
+                  setBodyText('Hola [Nombre], ');
+                  setShowCreator(true);
+                }}
+                className="flex items-center gap-2 bg-[#25D366] text-white px-4 py-2 rounded-lg hover:bg-[#1DA851] transition-colors"
+              >
+                <Plus className="w-5 h-5" />
+                Nueva Plantilla
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -305,7 +420,14 @@ export default function WhatsAppTemplateBuilder() {
                 <button onClick={() => setShowCreator(true)} className="text-blue-600 font-medium hover:underline">Crear mi primera plantilla</button>
               </div>
             ) : (
-              templates.map(tpl => (
+              templates.filter(tpl => {
+                if (statusFilter === 'ALL') return true;
+                if (statusFilter === 'APPROVED' && tpl.status === 'APPROVED') return true;
+                if (statusFilter === 'IN_REVIEW' && (tpl.status === 'PENDING' || tpl.status === 'IN_REVIEW')) return true;
+                if (statusFilter === 'REJECTED' && tpl.status === 'REJECTED') return true;
+                if (statusFilter === 'DRAFT' && tpl.status === 'DRAFT') return true;
+                return false;
+              }).map(tpl => (
                 <div key={tpl.id} className="bg-white rounded-xl p-5 border border-slate-200 hover:shadow-md transition-all flex flex-col">
                   <div className="flex justify-between items-start mb-4">
                     <div>
@@ -388,6 +510,17 @@ export default function WhatsAppTemplateBuilder() {
                 </div>
               </div>
 
+              <div className="pt-3 border-t border-slate-100">
+                <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-2"><ImageIcon className="w-4 h-4"/> Imagen de Encabezado (Opcional)</label>
+                <input
+                  type="url"
+                  value={headerImageUrl}
+                  onChange={e => setHeaderImageUrl(e.target.value)}
+                  placeholder="Pega la URL de una imagen JPG/PNG..."
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#25D366] outline-none"
+                />
+              </div>
+
               <div>
                 <div className="flex justify-between items-end mb-2">
                   <label className="block text-sm font-medium text-slate-700">Mensaje (Body)</label>
@@ -419,6 +552,54 @@ export default function WhatsAppTemplateBuilder() {
                 <p className="text-xs text-slate-500 mt-2">
                   Las variables <code className="bg-slate-100 px-1 rounded">[Nombre]</code> se convertirán internamente al formato <code className="bg-slate-100 px-1 rounded">{"{{1}}"}</code> requerido por Meta antes de enviarse a revisión.
                 </p>
+              </div>
+
+              <div className="pt-4 border-t border-slate-100">
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-sm font-medium text-slate-700 flex items-center gap-2"><LinkIcon className="w-4 h-4"/> Botones (Máx 3)</label>
+                  {buttonsList.length < 3 && (
+                    <button 
+                      onClick={() => setButtonsList([...buttonsList, { type: 'QUICK_REPLY', text: '' }])}
+                      className="text-xs bg-[#25D366] text-white px-2 py-1 rounded hover:bg-[#1DA851] font-medium"
+                    >+ Botón</button>
+                  )}
+                </div>
+                {buttonsList.map((btn, i) => (
+                  <div key={i} className="flex gap-2 items-start mb-2 bg-slate-50 p-2 rounded border border-slate-200">
+                    <div className="flex-1 space-y-2">
+                      <div className="flex gap-2">
+                        <select 
+                          value={btn.type}
+                          onChange={(e) => {
+                            const newBtns = [...buttonsList];
+                            newBtns[i].type = e.target.value;
+                            setButtonsList(newBtns);
+                          }}
+                          className="w-[140px] text-xs p-1.5 border rounded outline-none"
+                        >
+                          <option value="QUICK_REPLY">Resp. Rápida</option>
+                          <option value="URL">Sitio Web</option>
+                        </select>
+                        <input 
+                          className="flex-1 text-xs p-1.5 border rounded outline-none" 
+                          placeholder="Texto ej. Comprar" 
+                          value={btn.text} 
+                          onChange={(e) => { const nb = [...buttonsList]; nb[i].text = e.target.value; setButtonsList(nb); }} 
+                          maxLength={25}
+                        />
+                      </div>
+                      {btn.type === 'URL' && (
+                        <input 
+                          className="w-full text-xs p-1.5 border rounded outline-none" 
+                          placeholder="https://tulink.com..." 
+                          value={btn.url || ''} 
+                          onChange={(e) => { const nb = [...buttonsList]; nb[i].url = e.target.value; setButtonsList(nb); }} 
+                        />
+                      )}
+                    </div>
+                    <button onClick={() => setButtonsList(buttonsList.filter((_, idx) => idx !== i))} className="p-1 hover:bg-red-100 text-red-500 rounded mt-0.5"><X className="w-4 h-4"/></button>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -452,11 +633,27 @@ export default function WhatsAppTemplateBuilder() {
              <div className="w-full h-full bg-[#E5DDD5] bg-opacity-70 p-6 pt-20 overflow-y-auto" style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")', backgroundRepeat: 'repeat', backgroundSize: '70% auto', backgroundBlendMode: 'overlay'}}>
                 
                 <div className="bg-[#DCF8C6] p-3 rounded-tr-lg rounded-tl-lg rounded-bl-lg shadow text-[15px] text-[#303030] max-w-[90%] float-right relative break-words">
+                  {headerImageUrl && (
+                    <div className="mb-2 -mx-2 -mt-2">
+                       <img src={headerImageUrl} alt="Header" className="w-full h-auto rounded-tl-lg rounded-tr-lg" onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/400x200?text=Error+en+URL&font=inter' }} />
+                    </div>
+                  )}
                   {parsePreviewBody(bodyText)}
                   <div className="text-[10px] text-slate-400 text-right mt-1.5 flex justify-end items-center gap-1">
                     12:00 PM <span className="text-[#53bdeb]">✓✓</span>
                   </div>
                 </div>
+
+                {buttonsList.length > 0 && (
+                   <div className="float-right max-w-[90%] w-full clear-both flex flex-col gap-1 mt-1">
+                     {buttonsList.map((b, i) => (
+                        <div key={i} className="bg-white rounded-lg p-2.5 text-center text-[#00a884] text-[13px] font-medium shadow-sm flex justify-center items-center gap-2">
+                           {b.type === 'URL' && <span className="opacity-70"><LinkIcon className="w-3 h-3" /></span>}
+                           {b.text || 'Botón'}
+                        </div>
+                     ))}
+                   </div>
+                )}
 
              </div>
 

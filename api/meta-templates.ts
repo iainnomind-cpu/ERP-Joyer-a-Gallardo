@@ -8,6 +8,22 @@ export default async function handler(req: any, res: any) {
     return res.status(200).end();
   }
 
+  if (req.method === 'GET') {
+    try {
+      const META_TOKEN = process.env.VITE_META_BEARER_TOKEN || '';
+      const WABA_ID = process.env.VITE_META_WABA_ID || '';
+      if (!META_TOKEN || !WABA_ID) {
+        return res.status(500).json({ error: 'Credenciales de Meta no configuradas' });
+      }
+      const apiUrl = `https://graph.facebook.com/v19.0/${WABA_ID}/message_templates?fields=id,name,status,rejected_reason`;
+      const metaRes = await fetch(apiUrl, { headers: { 'Authorization': `Bearer ${META_TOKEN}` } });
+      const data = await metaRes.json();
+      return res.status(metaRes.status).json(data);
+    } catch (error: any) {
+      return res.status(500).json({ error: 'Error interno del servidor', details: error.message });
+    }
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
