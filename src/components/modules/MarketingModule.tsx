@@ -303,7 +303,11 @@ export default function MarketingModule() {
         window.alert('Falló el motor de envío: ' + (data.error || 'Error interno'));
         await supabase.from('marketing_campaigns').update({ status: 'paused' }).eq('id', campaignId);
       } else {
-        window.alert(`¡Envío ejecutado!\nImpactos exitosos: ${data.stats?.sent || 0}\nFallos: ${data.stats?.failed || 0}`);
+        if (data.stats?.failed > 0) {
+           window.alert(`Envío finalizado con algunos fallos.\nÉxitos: ${data.stats?.sent}\nFallos: ${data.stats?.failed}\nMotivo principal de rechazo dado por WhatsApp: ${data.lastError}`);
+        } else {
+           window.alert(`¡Envío ejecutado exitosamente!\nImpactos exitosos: ${data.stats?.sent || 0}\nFallos: ${data.stats?.failed || 0}`);
+        }
       }
     } catch (err: any) {
       window.alert('Error de conexión con el motor de envíos.');

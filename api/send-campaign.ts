@@ -107,6 +107,7 @@ export default async function handler(req: any, res: any) {
     // 6. Loop and dispatch
     let sentCount = 0;
     let failedCount = 0;
+    let lastError: string | null = null;
 
     // Wait minimally between requests to avoid rate limits entirely
     const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
@@ -169,10 +170,12 @@ export default async function handler(req: any, res: any) {
         } else {
           console.error(`Meta rejected send to ${cleanPhone}:`, fbResponse);
           failedCount++;
+          lastError = fbResponse.error?.message || JSON.stringify(fbResponse);
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error(`Fetch exception to ${cleanPhone}:`, err);
         failedCount++;
+        lastError = err.message;
       }
 
       // Backoff (250ms -> 4 msg/sec)
@@ -197,7 +200,8 @@ export default async function handler(req: any, res: any) {
     return res.status(200).json({ 
       success: true, 
       message: 'Campaña orquestada!',
-      stats: { sent: sentCount, failed: failedCount }
+      stats: { sent: sentCount, failed: failedCount },
+      lastError
     });
 
   } catch (error: any) {
