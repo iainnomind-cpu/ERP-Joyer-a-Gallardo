@@ -65,6 +65,7 @@ export default function MarketingModule() {
   const [activeTab, setActiveTab] = useState<'campaigns' | 'segments' | 'templates' | 'analytics'>('campaigns');
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [segments, setSegments] = useState<Segment[]>([]);
+  const [whatsappTemplates, setWhatsappTemplates] = useState<any[]>([]);
   const [showCampaignModal, setShowCampaignModal] = useState(false);
   const [showSegmentModal, setShowSegmentModal] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -74,9 +75,9 @@ export default function MarketingModule() {
     description: '',
     type: 'promotional',
     channel: 'whatsapp',
-    message_template: '',
+    template_id: '',
+    segment_id: '',
     scheduled_date: '',
-    target_segment: {}
   });
 
   const [newSegment, setNewSegment] = useState({
@@ -97,24 +98,22 @@ export default function MarketingModule() {
     setLoading(true);
     try {
       if (activeTab === 'campaigns') {
-        const { data } = await supabase
-          .from('marketing_campaigns')
-          .select('*')
-          .order('created_at', { ascending: false });
-        setCampaigns(data || []);
+        const [campaignsRes, templatesRes] = await Promise.all([
+          supabase.from('marketing_campaigns').select('*').order('created_at', { ascending: false }),
+          supabase.from('whatsapp_templates').select('*').eq('status', 'APPROVED')
+        ]);
+        const segs = await supabase.from('marketing_segments').select('*');
+        setCampaigns(campaignsRes.data || []);
+        setWhatsappTemplates(templatesRes.data || []);
+        setSegments(segs.data || []);
       } else if (activeTab === 'segments') {
         const { data } = await supabase
           .from('marketing_segments')
           .select('*')
           .order('created_at', { ascending: false });
         setSegments(data || []);
-      } else if (activeTab === 'automations') {
-        const { data } = await supabase
-          .from('marketing_segments')
-          .select('*')
-          .order('created_at', { ascending: false });
-        setSegments(data || []);
-      } // Not loading automations here anymore since templates load themselves
+      }
+// removed automations check
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -124,9 +123,22 @@ export default function MarketingModule() {
 
   const createCampaign = async () => {
     try {
+      const selectedTpl = whatsappTemplates.find(t => t.id === newCampaign.template_id);
+      const selectedSeg = segments.find(s => s.id === newCampaign.segment_id);
+
+      const payload = {
+        name: newCampaign.name,
+        description: newCampaign.description,
+        type: newCampaign.type,
+        channel: newCampaign.channel,
+        message_template: selectedTpl ? selectedTpl.name : newCampaign.template_id,
+        target_segment: selectedSeg ? { id: selectedSeg.id, name: selectedSeg.name } : {},
+        scheduled_date: newCampaign.scheduled_date || null
+      };
+
       const { error } = await supabase
         .from('marketing_campaigns')
-        .insert([newCampaign]);
+        .insert([payload]);
 
       if (!error) {
         setShowCampaignModal(false);
@@ -135,9 +147,9 @@ export default function MarketingModule() {
           description: '',
           type: 'promotional',
           channel: 'whatsapp',
-          message_template: '',
+          template_id: '',
+          segment_id: '',
           scheduled_date: '',
-          target_segment: {}
         });
         loadData();
       }
@@ -497,17 +509,39 @@ export default function MarketingModule() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Mensaje</label>
-                  <textarea
-                    value={newCampaign.message_template}
-                    onChange={(e) => setNewCampaign({ ...newCampaign, message_template: e.target.value })}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
-                    rows={6}
-                    placeholder="Hola {nombre}, tenemos una promoción especial para ti..."
-                  />
-                  <p className="text-xs text-slate-500 mt-1">
-                    Variables disponibles: {'{nombre}'}, {'{apellido}'}, {'{total_compras}'}
-                  </p>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Segmento de Destino</label>
+                  <select
+                    value={newCampaign.segment_id}
+                    onChange={(e) => setNewCampaign({ ...newCampaign, segment_id: e.target.value })}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer"
+                  >
+                    <option value="" disabled>Seleccione un segmento de audiencia...</option>
+                    {segments.map(seg => (
+                      <option key={seg.id} value={seg.id}>{seg.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Plantilla Meta Empleada (Aprobadas)</label>
+                  <select
+                    value={newCampaign.template_id}
+                    onChange={(e) => setNewCampaign({ ...newCampaign, template_id: e.target.value })}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#25D366] focus:border-transparent outline-none cursor-pointer text-slate-700"
+                  >
+                    <option value="" disabled>Selecciona una plantilla verificada por Meta...</option>
+                    {whatsappTemplates.map(tpl => (
+                      <option key={tpl.id} value={tpl.id}>{tpl.name}</option>
+                    ))}
+                  </select>
+                  {newCampaign.template_id && (
+                    <div className="mt-3 bg-[#E5DDD5] p-4 rounded-lg relative overflow-hidden">
+                      <div className="bg-[#DCF8C6] p-3 rounded-bl-lg rounded-tl-lg rounded-tr-lg shadow-sm text-sm text-[#303030] whitespace-pre-wrap relative z-10 w-full max-w-[95%] float-right">
+                         {whatsappTemplates.find(t => t.id === newCampaign.template_id)?.components?.find((c:any) => c.type === 'BODY')?.text || 'Sin contenido visualizable'}
+                      </div>
+                      <div className="clear-both"></div>
+                    </div>
+                  )}
                 </div>
 
                 <div>
