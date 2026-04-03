@@ -19,6 +19,7 @@ import {
   Edit
 } from 'lucide-react';
 import WhatsAppTemplateBuilder from './WhatsAppTemplateBuilder';
+import MarketingAnalytics from './MarketingAnalytics';
 
 interface Campaign {
   id: string;
@@ -65,6 +66,7 @@ export default function MarketingModule() {
   const [activeTab, setActiveTab] = useState<'campaigns' | 'segments' | 'templates' | 'analytics'>('campaigns');
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [segments, setSegments] = useState<Segment[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
   const [whatsappTemplates, setWhatsappTemplates] = useState<any[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [showCampaignModal, setShowCampaignModal] = useState(false);
@@ -119,6 +121,15 @@ export default function MarketingModule() {
           .select('*')
           .order('created_at', { ascending: false });
         setSegments(data || []);
+      } else if (activeTab === 'analytics') {
+        const [campRes, segRes, custRes] = await Promise.all([
+          supabase.from('marketing_campaigns').select('*'),
+          supabase.from('marketing_segments').select('*'),
+          supabase.from('customers').select('id, material_preference, preferred_category')
+        ]);
+        setCampaigns(campRes.data || []);
+        setSegments(segRes.data || []);
+        setCustomers(custRes.data || []);
       }
 // removed automations check
     } catch (error) {
@@ -600,11 +611,11 @@ export default function MarketingModule() {
         )}
 
         {activeTab === 'analytics' && (
-          <div className="bg-white rounded-xl p-12 text-center border border-slate-200">
-            <BarChart3 className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-slate-900 mb-2">Análisis de Marketing</h3>
-            <p className="text-slate-600">Panel de análisis disponible próximamente</p>
-          </div>
+          <MarketingAnalytics 
+            campaigns={campaigns} 
+            segments={segments} 
+            customers={customers} 
+          />
         )}
 
         {showCampaignModal && (
