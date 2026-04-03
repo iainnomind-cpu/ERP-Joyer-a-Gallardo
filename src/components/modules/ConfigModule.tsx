@@ -1,10 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, BusinessRule, User } from '../../lib/supabase';
 import { Settings, DollarSign, AlertCircle, Save, Edit2, X, Users, Plus, Check, Shield } from 'lucide-react';
-import { PermissionsMap, ModulePermissions, getDefaultPermissions, mergePermissions, loadUserPermissions, saveUserPermissions, ALL_MODULES, MODULE_LABELS, RoleId } from '../../lib/permissions';
+import { PermissionsMap, ModulePermissions, getDefaultPermissions, ALL_MODULES, MODULE_LABELS, RoleId } from '../../lib/permissions';
+
+interface CurrentUser {
+  id: string;
+  username: string;
+  full_name: string;
+  email?: string;
+  role: 'admin' | 'vendedor' | 'cajero';
+  is_active: boolean;
+}
 
 interface ConfigModuleProps {
-  currentUser: User | null;
+  currentUser: CurrentUser | null;
 }
 
 export default function ConfigModule({ currentUser }: ConfigModuleProps) {

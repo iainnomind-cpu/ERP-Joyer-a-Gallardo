@@ -1,17 +1,18 @@
-import { useState, useEffect } from 'react';
-import { LogOut } from 'lucide-react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import Layout from './components/Layout';
 import LoginModule from './components/modules/LoginModule';
-import Dashboard from './components/modules/Dashboard';
-import CRMModule from './components/modules/CRMModule';
-import KanbanModule from './components/modules/KanbanModule';
-import InventoryModule from './components/modules/InventoryModule';
-import SalesModule from './components/modules/SalesModule';
-import QuotesModule from './components/modules/QuotesModule';
-import ConfigModule from './components/modules/ConfigModule';
-import MarketingModule from './components/modules/MarketingModule';
-import { EcommerceDashboard } from './pages/EcommerceDashboard';
 import { PermissionsMap, getDefaultPermissions, mergePermissions, loadUserPermissions, getModulePermissions } from './lib/permissions';
+
+// Lazy-loaded modules — each becomes its own chunk
+const Dashboard = lazy(() => import('./components/modules/Dashboard'));
+const CRMModule = lazy(() => import('./components/modules/CRMModule'));
+const KanbanModule = lazy(() => import('./components/modules/KanbanModule'));
+const InventoryModule = lazy(() => import('./components/modules/InventoryModule'));
+const SalesModule = lazy(() => import('./components/modules/SalesModule'));
+const QuotesModule = lazy(() => import('./components/modules/QuotesModule'));
+const ConfigModule = lazy(() => import('./components/modules/ConfigModule'));
+const MarketingModule = lazy(() => import('./components/modules/MarketingModule'));
+const EcommerceDashboard = lazy(() => import('./pages/EcommerceDashboard').then(m => ({ default: m.EcommerceDashboard })));
 
 interface CurrentUser {
   id: string;
@@ -85,9 +86,17 @@ function App() {
     return <LoginModule onLoginSuccess={setCurrentUser} />;
   }
 
+  const ModuleLoader = () => (
+    <div className="flex items-center justify-center h-96">
+      <div className="text-center">
+        <div className="w-12 h-12 border-4 border-amber-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+        <p className="text-gray-500 text-sm">Cargando módulo...</p>
+      </div>
+    </div>
+  );
+
   return (
     <>
-
       <Layout
         currentModule={currentModule}
         onModuleChange={setCurrentModule}
@@ -95,15 +104,17 @@ function App() {
         onLogout={handleLogout}
         permissions={userPermissions}
       >
-        {currentModule === 'dashboard' && <Dashboard currentUser={currentUser} />}
-        {currentModule === 'crm' && <CRMModule currentUser={currentUser} permissions={getModulePermissions(userPermissions, 'crm')} />}
-        {currentModule === 'kanban' && <KanbanModule currentUser={currentUser} />}
-        {currentModule === 'inventory' && <InventoryModule currentUser={currentUser} permissions={getModulePermissions(userPermissions, 'inventory')} />}
-        {currentModule === 'sales' && <SalesModule currentUser={currentUser} permissions={getModulePermissions(userPermissions, 'sales')} />}
-        {currentModule === 'quotes' && <QuotesModule currentUser={currentUser} />}
-        {currentModule === 'marketing' && <MarketingModule />}
-        {currentModule === 'ecommerce' && <EcommerceDashboard />}
-        {currentModule === 'config' && <ConfigModule currentUser={currentUser} />}
+        <Suspense fallback={<ModuleLoader />}>
+          {currentModule === 'dashboard' && <Dashboard currentUser={currentUser} />}
+          {currentModule === 'crm' && <CRMModule currentUser={currentUser} permissions={getModulePermissions(userPermissions, 'crm')} />}
+          {currentModule === 'kanban' && <KanbanModule currentUser={currentUser} />}
+          {currentModule === 'inventory' && <InventoryModule currentUser={currentUser} permissions={getModulePermissions(userPermissions, 'inventory')} />}
+          {currentModule === 'sales' && <SalesModule currentUser={currentUser} permissions={getModulePermissions(userPermissions, 'sales')} />}
+          {currentModule === 'quotes' && <QuotesModule currentUser={currentUser} permissions={getModulePermissions(userPermissions, 'quotes')} />}
+          {currentModule === 'marketing' && <MarketingModule />}
+          {currentModule === 'ecommerce' && <EcommerceDashboard />}
+          {currentModule === 'config' && <ConfigModule currentUser={currentUser} />}
+        </Suspense>
       </Layout>
     </>
   );

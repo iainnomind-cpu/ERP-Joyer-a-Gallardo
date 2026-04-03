@@ -98,7 +98,7 @@ export type Order = {
   order_number: string;
   customer_id: string | null;
   status: string;
-  order_type: 'venta' | 'cotizacion';
+  order_type: 'venta' | 'cotizacion' | 'wholesale';
   subtotal: number;
   total: number;
   payment_status: string;

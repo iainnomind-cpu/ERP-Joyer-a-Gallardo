@@ -21,13 +21,30 @@ import {
   Plus
 } from 'lucide-react';
 import NewQuoteModal from './NewQuoteModal';
+import { ModulePermissions } from '../../lib/permissions';
+
+interface CurrentUser {
+  id: string;
+  username: string;
+  full_name: string;
+  email?: string;
+  role: 'admin' | 'vendedor' | 'cajero';
+  is_active: boolean;
+}
+
+interface QuotesModuleProps {
+  currentUser?: CurrentUser | null;
+  permissions?: ModulePermissions;
+}
 
 interface OrderWithDetails extends Order {
   customer?: Customer;
   items?: (OrderItem & { product?: Product })[];
 }
 
-export default function QuotesModule() {
+export default function QuotesModule({ currentUser, permissions }: QuotesModuleProps) {
+  const canCreate = permissions?.create ?? true;
+  const canDelete = permissions?.delete ?? true;
   const [quotes, setQuotes] = useState<OrderWithDetails[]>([]);
   const [filteredQuotes, setFilteredQuotes] = useState<OrderWithDetails[]>([]);
   const [selectedQuote, setSelectedQuote] = useState<OrderWithDetails | null>(null);
@@ -49,23 +66,7 @@ export default function QuotesModule() {
     avgValue: 0
   });
 
-  const [currentUser, setCurrentUser] = useState<{
-    id: string;
-    name: string;
-  }>({ id: '', name: '' });
-
-  useEffect(() => {
-    const getUserInfo = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setCurrentUser({
-          id: user.id,
-          name: user.email?.split('@')[0] || user.user_metadata?.name || 'Usuario'
-        });
-      }
-    };
-    getUserInfo();
-  }, []);
+  // currentUser is now received as prop from App.tsx
 
   useEffect(() => {
     loadQuotes();
@@ -81,6 +82,7 @@ export default function QuotesModule() {
     const { data: ordersData, error } = await supabase
       .from('orders')
       .select('*')
+      .eq('order_type', 'cotizacion')
       .order('created_at', { ascending: false });
 
     if (!error && ordersData) {
@@ -216,13 +218,15 @@ export default function QuotesModule() {
               <h2 className="text-2xl font-bold text-gray-900">Módulo de Cotizaciones</h2>
               <p className="text-gray-600 mt-1">Gestiona y visualiza todas tus cotizaciones con historial completo</p>
             </div>
-            <button
-              onClick={() => setShowNewQuoteModal(true)}
-              className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md hover:shadow-lg"
-            >
-              <Plus className="w-5 h-5" />
-              Nueva Cotización
-            </button>
+            {canCreate && (
+              <button
+                onClick={() => setShowNewQuoteModal(true)}
+                className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md hover:shadow-lg"
+              >
+                <Plus className="w-5 h-5" />
+                Nueva Cotización
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

@@ -38,39 +38,35 @@ export default function LoginModule({ onLoginSuccess }: LoginModuleProps) {
     setError('');
 
     try {
+      // Use the secure verify_login RPC that compares bcrypt hashes server-side
       const { data, error: queryError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('username', username.trim())
-        .eq('password_hash', password)
-        .maybeSingle();
+        .rpc('verify_login', {
+          p_username: username.trim(),
+          p_password: password
+        });
 
       if (queryError) {
-        console.error('Error al buscar usuario:', queryError);
+        console.error('Error al verificar login:', queryError);
         setError('Error al conectar con el servidor');
         setLoading(false);
         return;
       }
 
-      if (!data) {
+      if (!data || data.length === 0) {
         setError('Usuario o contraseña incorrectos');
         setLoading(false);
         return;
       }
 
-      if (!data.is_active) {
-        setError('Usuario desactivado. Contacte al administrador');
-        setLoading(false);
-        return;
-      }
+      const userData = data[0];
 
       const currentUser: CurrentUser = {
-        id: data.id,
-        username: data.username,
-        full_name: data.full_name,
-        email: data.email || undefined,
-        role: data.role,
-        is_active: data.is_active
+        id: userData.id,
+        username: userData.username,
+        full_name: userData.full_name,
+        email: userData.email || undefined,
+        role: userData.role as CurrentUser['role'],
+        is_active: userData.is_active
       };
 
       localStorage.setItem('current_user', JSON.stringify(currentUser));
@@ -166,10 +162,8 @@ export default function LoginModule({ onLoginSuccess }: LoginModuleProps) {
 
           <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-xs text-blue-800">
-              <strong>Usuarios por defecto:</strong><br/>
-              • admin / admin (Administrador)<br/>
-              • vendedor1 / vendedor1 (Vendedor)<br/>
-              • cajero1 / cajero1 (Cajero)
+              <strong>¿Necesitas acceso?</strong><br/>
+              Contacta al administrador del sistema para obtener tus credenciales.
             </p>
           </div>
 

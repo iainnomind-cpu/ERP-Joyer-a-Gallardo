@@ -44,7 +44,20 @@ interface Customer {
   source: string;
 }
 
-export default function KanbanModule() {
+interface CurrentUser {
+  id: string;
+  username: string;
+  full_name: string;
+  email?: string;
+  role: 'admin' | 'vendedor' | 'cajero';
+  is_active: boolean;
+}
+
+interface KanbanModuleProps {
+  currentUser?: CurrentUser | null;
+}
+
+export default function KanbanModule({ currentUser }: KanbanModuleProps) {
   const [stages, setStages] = useState<Stage[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);

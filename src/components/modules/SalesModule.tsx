@@ -533,7 +533,6 @@ export default function SalesModule({ currentUser, permissions }: SalesModulePro
             quantity_b: Math.ceil(item.quantity / 3),
             quantity_c: Math.floor(item.quantity / 3),
             reference: orderNumber,
-            reference: orderNumber,
             notes: `Venta POS - Confirmación Web - Pedido ${orderNumber}`,
             created_by: 'system'
           });
@@ -1017,15 +1016,51 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
 
       if (items && items.length > 0) {
         for (const item of items) {
-          // Find which branch stock to restore to, assuming branch 'a' for now or general update
-          // Simplified: Just add the quantity back to total_stock via an RPC or similar, 
-          // or we just skip complete stock sync here if it's too complex and log it.
-          // For now, let's just log it or do a basic update if we know the rules.
-          console.log('Would restore stock for', item.product_id, item.quantity);
+          // Restore stock to branch A (primary) and update total_stock
+          const { data: product } = await supabase
+            .from('products')
+            .select('stock_a, total_stock')
+            .eq('id', item.product_id)
+            .single();
+
+          if (product) {
+            await supabase
+              .from('products')
+              .update({
+                stock_a: product.stock_a + item.quantity,
+                total_stock: product.total_stock + item.quantity,
+              })
+              .eq('id', item.product_id);
+
+            // Register inventory movement for traceability
+            await supabase
+              .from('inventory_movements')
+              .insert({
+                product_id: item.product_id,
+                movement_type: 'in',
+                quantity_a: item.quantity,
+                quantity_b: 0,
+                quantity_c: 0,
+                reference: order.order_number,
+                notes: `Devolución por cancelación de venta ${order.order_number}`,
+                created_by: getUserName(),
+              });
+          }
         }
       }
 
-      // 2. Delete the order (cascade should delete items, transactions if configured)
+      // 2. Delete order items first, then the order
+      await supabase
+        .from('order_items')
+        .delete()
+        .eq('order_id', order.id);
+
+      // Delete POS transactions if exist
+      await supabase
+        .from('pos_transactions')
+        .delete()
+        .eq('order_id', order.id);
+
       const { error } = await supabase
         .from('orders')
         .delete()
@@ -1033,7 +1068,7 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
 
       if (error) throw error;
       
-      alert('Venta cancelada exitosamente');
+      alert('Venta cancelada y stock restaurado exitosamente');
       loadOrders();
     } catch (error) {
       console.error('Error deleting order:', error);
