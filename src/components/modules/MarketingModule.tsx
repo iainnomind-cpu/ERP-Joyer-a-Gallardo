@@ -272,11 +272,44 @@ export default function MarketingModule() {
   };
 
   const toggleCampaignStatus = async (campaignId: string, currentStatus: string) => {
-    const newStatus = currentStatus === 'active' ? 'paused' : 'active';
-    await supabase
-      .from('marketing_campaigns')
-      .update({ status: newStatus })
-      .eq('id', campaignId);
+    if (currentStatus === 'active') {
+      await supabase.from('marketing_campaigns').update({ status: 'paused' }).eq('id', campaignId);
+      loadData();
+      return;
+    }
+
+    if (currentStatus === 'completed') {
+      window.alert('Esta campaña ya ha finalizado. Duplíquela o cree otra para volver a enviar.');
+      return;
+    }
+
+    if (!window.confirm('Se procederá a contactar masivamente a los clientes de este segmento vía WhatsApp. Esta acción consumirá tu cuota de WABA. ¿Iniciar envío?')) {
+      return;
+    }
+
+    // Update to active visually
+    await supabase.from('marketing_campaigns').update({ status: 'active' }).eq('id', campaignId);
+    loadData();
+
+    try {
+      const res = await fetch('/api/send-campaign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campaignId })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        window.alert('Falló el motor de envío: ' + (data.error || 'Error interno'));
+        await supabase.from('marketing_campaigns').update({ status: 'paused' }).eq('id', campaignId);
+      } else {
+        window.alert(`¡Envío ejecutado!\nImpactos exitosos: ${data.stats?.sent || 0}\nFallos: ${data.stats?.failed || 0}`);
+      }
+    } catch (err: any) {
+      window.alert('Error de conexión con el motor de envíos.');
+      await supabase.from('marketing_campaigns').update({ status: 'paused' }).eq('id', campaignId);
+    }
+    
     loadData();
   };
 
