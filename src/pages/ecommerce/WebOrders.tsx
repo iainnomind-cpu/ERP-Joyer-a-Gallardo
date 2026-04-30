@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase, Order } from '../../lib/supabase';
-import { ShoppingBag, Truck, Store, CheckCircle, Clock, XCircle, Search, Eye, Package, DollarSign } from 'lucide-react';
+import { ShoppingBag, Truck, Store, Eye, Package, DollarSign } from 'lucide-react';
 
 type WebOrder = Order & { customer?: any; items?: any[] };
 

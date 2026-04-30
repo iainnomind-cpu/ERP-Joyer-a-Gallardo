@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Filter, Phone, Bot, AlertTriangle, Send, User, CheckCircle2, XCircle, MessageSquare } from 'lucide-react';
+import { Search, Phone, Bot, AlertTriangle, Send, User, CheckCircle2, MessageSquare } from 'lucide-react';
 
 interface CurrentUser {
   id: string;
@@ -104,7 +104,7 @@ export default function InboxModule({ currentUser }: InboxModuleProps) {
       {/* Sidebar - Chat List */}
       <div className="w-1/3 border-r border-gray-200 flex flex-col bg-gray-50">
         <div className="p-4 border-b border-gray-200 bg-white">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">Bandeja de Entrada</h2>
+          <h2 className="text-lg font-bold text-gray-900 mb-4">Inbox de {currentUser.full_name.split(' ')[0]}</h2>
           
           <div className="flex gap-2 mb-4">
             <button

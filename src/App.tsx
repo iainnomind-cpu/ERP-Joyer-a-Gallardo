@@ -32,7 +32,7 @@ function App() {
     const params = new URLSearchParams(window.location.search);
     const moduleParam = params.get('module');
     if (moduleParam && ['dashboard', 'crm', 'inventory', 'sales', 'config', 'kanban', 'marketing', 'quotes', 'ecommerce', 'inbox'].includes(moduleParam)) {
-      return moduleParam as any;
+      return moduleParam as 'dashboard' | 'crm' | 'inventory' | 'sales' | 'config' | 'kanban' | 'marketing' | 'quotes' | 'ecommerce' | 'inbox';
     }
 
     return 'dashboard';
@@ -56,7 +56,7 @@ function App() {
       try {
         const user = JSON.parse(stored);
         setCurrentUser(user);
-      } catch (e) {
+      } catch {
         localStorage.removeItem('current_user');
       }
     }
