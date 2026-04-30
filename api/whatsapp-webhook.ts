@@ -184,6 +184,13 @@ export default async function handler(req: any, res: any) {
           const value = changes.value;
 
           if (value.messages && value.messages[0]) {
+            const incomingPhoneNumberId = value.metadata?.phone_number_id;
+            
+            // Si el mensaje no es para este número de la joyería, lo ignoramos (para no interferir con Wedding Planner u otros)
+            if (incomingPhoneNumberId && incomingPhoneNumberId !== process.env.META_PHONE_NUMBER_ID) {
+              continue;
+            }
+
             const from = value.messages[0].from;
             const msgBody = value.messages[0].text?.body || '';
             const contactName = value.contacts?.[0]?.profile?.name || 'Desconocido';
