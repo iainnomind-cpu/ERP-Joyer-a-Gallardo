@@ -7,7 +7,7 @@ export default async function handler(req: any, res: any) {
   
   const { to, text } = req.body;
   const META_ACCESS_TOKEN = process.env.META_ACCESS_TOKEN;
-  const META_PHONE_NUMBER_ID = process.env.META_PHONE_NUMBER_ID;
+  const META_PHONE_NUMBER_ID = process.env.META_PHONE_NUMBER_ID || '1000468656487231';
 
   if (!META_ACCESS_TOKEN || !META_PHONE_NUMBER_ID) {
     return res.status(500).json({ error: 'Meta credentials missing' });

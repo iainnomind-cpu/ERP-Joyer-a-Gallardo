@@ -6,7 +6,7 @@ const openai = new OpenAI({
 });
 
 const META_ACCESS_TOKEN = process.env.META_ACCESS_TOKEN;
-const META_PHONE_NUMBER_ID = process.env.META_PHONE_NUMBER_ID;
+const META_PHONE_NUMBER_ID = process.env.META_PHONE_NUMBER_ID || '1000468656487231';
 
 // Supabase Setup
 const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
@@ -187,7 +187,7 @@ export default async function handler(req: any, res: any) {
             const incomingPhoneNumberId = value.metadata?.phone_number_id;
             
             // Si el mensaje no es para este número de la joyería, lo ignoramos (para no interferir con Wedding Planner u otros)
-            if (incomingPhoneNumberId && incomingPhoneNumberId !== process.env.META_PHONE_NUMBER_ID) {
+            if (incomingPhoneNumberId && incomingPhoneNumberId !== META_PHONE_NUMBER_ID) {
               continue;
             }
 
