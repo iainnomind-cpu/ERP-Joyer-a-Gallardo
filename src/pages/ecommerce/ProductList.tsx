@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { supabase, Product } from '../../lib/supabase';
-import { Search, Filter, Edit, Eye, Trash2, MoreVertical, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { Search, Edit, Eye, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 
 interface ProductListProps {
     products: Product[];

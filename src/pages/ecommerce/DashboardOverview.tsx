@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { Package, AlertTriangle, TrendingUp, DollarSign, Clock, CheckCircle } from 'lucide-react';
+import { useMemo } from 'react';
+import { Package, AlertTriangle, TrendingUp, DollarSign, CheckCircle } from 'lucide-react';
 import { Product } from '../../lib/supabase';
 
 interface DashboardOverviewProps {

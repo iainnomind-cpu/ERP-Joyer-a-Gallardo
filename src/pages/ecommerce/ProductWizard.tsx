@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, Product, Category, uploadProductImage } from '../../lib/supabase';
-import { Save, ArrowRight, ArrowLeft, Upload, X, Check, Image as ImageIcon } from 'lucide-react';
+import { Save, ArrowRight, X, Check, Image as ImageIcon } from 'lucide-react';
 
 interface ProductWizardProps {
     onCancel: () => void;

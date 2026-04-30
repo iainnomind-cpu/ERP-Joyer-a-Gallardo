@@ -159,6 +159,7 @@ Devuelve ÚNICAMENTE la palabra clave en minúsculas sin puntos.`;
 // MAIN HANDLER
 // ----------------------------------------------------------------------
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, Category } from '../../lib/supabase';
-import { Folder, FolderPlus, Edit2, Trash2, ChevronRight, ChevronDown, Save, X, Plus } from 'lucide-react';
+import { Folder, FolderPlus, Edit2, Trash2, ChevronRight, ChevronDown, X, Plus } from 'lucide-react';
 
 interface CategoryManagerProps {
     categories: Category[];
