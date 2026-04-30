@@ -22,6 +22,8 @@ export default function CRMModule({ currentUser, permissions }: CRMModuleProps) 
   const canEdit = permissions?.edit ?? true;
   const canDelete = permissions?.delete ?? true;
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [leads, setLeads] = useState<any[]>([]);
+  const [crmTab, setCrmTab] = useState<'clientes' | 'leads'>('clientes');
   const [churnAlerts, setChurnAlerts] = useState<ChurnAlert[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -58,6 +60,7 @@ export default function CRMModule({ currentUser, permissions }: CRMModuleProps) 
 
   useEffect(() => {
     loadCustomers();
+    loadLeads();
     loadChurnAlerts();
     loadCreditStats();
     loadCategories();
@@ -82,6 +85,14 @@ export default function CRMModule({ currentUser, permissions }: CRMModuleProps) 
       calculateStats(data);
     }
     setLoading(false);
+  };
+
+  const loadLeads = async () => {
+    const { data } = await supabase
+      .from('crm_chats')
+      .select('*')
+      .order('last_message_at', { ascending: false });
+    if (data) setLeads(data);
   };
 
   const loadChurnAlerts = async () => {
@@ -462,7 +473,23 @@ export default function CRMModule({ currentUser, permissions }: CRMModuleProps) 
         </div>
       )}
 
-      <div className="bg-white rounded-lg border border-gray-200">
+      <div className="flex border-b border-gray-200 mb-4">
+        <button
+          onClick={() => setCrmTab('clientes')}
+          className={`py-2 px-4 border-b-2 font-medium text-sm transition-colors ${crmTab === 'clientes' ? 'border-amber-500 text-amber-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+        >
+          Clientes (Con Compras)
+        </button>
+        <button
+          onClick={() => setCrmTab('leads')}
+          className={`py-2 px-4 border-b-2 font-medium text-sm transition-colors ${crmTab === 'leads' ? 'border-amber-500 text-amber-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+        >
+          Leads (Prospectos)
+        </button>
+      </div>
+
+      {crmTab === 'clientes' ? (
+        <div className="bg-white rounded-lg border border-gray-200">
         <div className="p-4 border-b border-gray-200">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
@@ -621,6 +648,45 @@ export default function CRMModule({ currentUser, permissions }: CRMModuleProps) 
           </table>
         </div>
       </div>
+      ) : (
+        <div className="bg-white rounded-lg border border-gray-200">
+          <div className="p-4 border-b border-gray-200">
+            <h3 className="font-bold text-gray-800">Leads en Conversación (Bot Gema)</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lead</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teléfono</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Última Interacción</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado / Interés</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {leads.map(lead => (
+                  <tr key={lead.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{lead.customer_name || 'Desconocido'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{lead.phone_number}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(lead.last_message_at).toLocaleString()}
+                      <p className="text-xs text-gray-400 mt-1 truncate max-w-xs">{lead.last_message}</p>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
+                        {lead.bot_state}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {leads.length === 0 && (
+                  <tr><td colSpan={4} className="px-6 py-8 text-center text-gray-500">No hay leads registrados por el bot.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {showAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">

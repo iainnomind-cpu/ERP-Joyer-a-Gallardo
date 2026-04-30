@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Phone, Bot, AlertTriangle, Send, User, CheckCircle2, MessageSquare } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 
 interface CurrentUser {
   id: string;
@@ -27,48 +28,6 @@ interface Message {
   created_at: string;
 }
 
-// Mock Data
-const MOCK_CHATS: Chat[] = [
-  {
-    id: 'chat-1',
-    phone_number: '5215551234567',
-    customer_name: 'María García',
-    last_message: 'Quiero hablar con un humano por favor.',
-    last_message_at: new Date(Date.now() - 1000 * 60 * 5).toISOString(), // 5 mins ago
-    status: 'paused',
-    requires_attention: true,
-    unread_count: 1,
-  },
-  {
-    id: 'chat-2',
-    phone_number: '5215559876543',
-    customer_name: 'Juan Pérez',
-    last_message: '¿Tienen anillos de compromiso de oro blanco?',
-    last_message_at: new Date(Date.now() - 1000 * 60 * 30).toISOString(), // 30 mins ago
-    status: 'active',
-    requires_attention: false,
-    unread_count: 0,
-  },
-  {
-    id: 'chat-3',
-    phone_number: '5215554567890',
-    last_message: 'Gracias por la información, ya hice mi compra.',
-    last_message_at: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), // 2 hours ago
-    status: 'resolved',
-    requires_attention: false,
-    unread_count: 0,
-  }
-];
-
-const MOCK_MESSAGES: Record<string, Message[]> = {
-  'chat-1': [
-    { id: 'm1', chat_id: 'chat-1', role: 'user', content: 'Hola, tengo una duda sobre un anillo', created_at: new Date(Date.now() - 1000 * 60 * 10).toISOString() },
-    { id: 'm2', chat_id: 'chat-1', role: 'assistant', content: '¡Hola! Claro, puedes ver nuestro catálogo en línea en www.gallardojoyas.com. ¿Buscas algo en específico?', created_at: new Date(Date.now() - 1000 * 60 * 9).toISOString() },
-    { id: 'm3', chat_id: 'chat-1', role: 'user', content: 'Quiero hablar con un humano por favor.', created_at: new Date(Date.now() - 1000 * 60 * 5).toISOString() },
-    { id: 'm4', chat_id: 'chat-1', role: 'system', content: 'El cliente ha solicitado atención humana. El bot ha sido pausado.', created_at: new Date(Date.now() - 1000 * 60 * 5 + 1000).toISOString() },
-  ]
-};
-
 interface InboxModuleProps {
   currentUser: CurrentUser;
 }
@@ -77,26 +36,78 @@ export default function InboxModule({ currentUser }: InboxModuleProps) {
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'attention' | 'active'>('attention');
   const [replyText, setReplyText] = useState('');
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
 
-  const filteredChats = MOCK_CHATS.filter(chat => {
+  useEffect(() => {
+    fetchChats();
+    const interval = setInterval(fetchChats, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (selectedChatId) {
+      fetchMessages(selectedChatId);
+      const interval = setInterval(() => fetchMessages(selectedChatId), 5000);
+      return () => clearInterval(interval);
+    } else {
+      setMessages([]);
+    }
+  }, [selectedChatId]);
+
+  const fetchChats = async () => {
+    const { data } = await supabase
+      .from('crm_chats')
+      .select('*')
+      .order('last_message_at', { ascending: false });
+    if (data) setChats(data);
+  };
+
+  const fetchMessages = async (chatId: string) => {
+    const { data } = await supabase
+      .from('crm_messages')
+      .select('*')
+      .eq('chat_id', chatId)
+      .order('created_at', { ascending: true });
+    if (data) setMessages(data);
+  };
+
+  const filteredChats = chats.filter(chat => {
     if (filter === 'attention') return chat.requires_attention;
     if (filter === 'active') return chat.status === 'active';
     return true;
   });
 
-  const selectedChat = MOCK_CHATS.find(c => c.id === selectedChatId);
-  const messages = selectedChatId ? MOCK_MESSAGES[selectedChatId] || [] : [];
+  const selectedChat = chats.find(c => c.id === selectedChatId);
 
-  const handleSendMessage = () => {
-    if (!replyText.trim() || !selectedChatId) return;
-    // Here we would send the message to the DB and WhatsApp API
-    console.log('Sending message:', replyText, 'to chat:', selectedChatId);
+  const handleSendMessage = async () => {
+    if (!replyText.trim() || !selectedChat) return;
+    const textToSend = replyText.trim();
     setReplyText('');
+    
+    if (selectedChat.status === 'active') {
+      await supabase.from('crm_chats').update({ status: 'paused', requires_attention: false }).eq('id', selectedChat.id);
+    } else if (selectedChat.requires_attention) {
+      await supabase.from('crm_chats').update({ requires_attention: false }).eq('id', selectedChat.id);
+    }
+    
+    await supabase.from('crm_messages').insert([{ chat_id: selectedChat.id, content: textToSend, role: 'agent' }]);
+    fetchMessages(selectedChat.id);
+    fetchChats();
+    
+    await fetch('/api/send-message', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: selectedChat.phone_number, text: textToSend })
+    });
   };
 
-  const handleResumeBot = () => {
-    // Logic to resume the bot for this chat
-    console.log('Resuming bot for chat:', selectedChatId);
+  const handleResumeBot = async () => {
+    if (!selectedChat) return;
+    await supabase.from('crm_chats').update({ status: 'active', requires_attention: false, bot_state: 'initial' }).eq('id', selectedChat.id);
+    await supabase.from('crm_messages').insert([{ chat_id: selectedChat.id, content: 'El agente ha reactivado el asistente virtual.', role: 'system' }]);
+    fetchChats();
+    fetchMessages(selectedChat.id);
   };
 
   return (
