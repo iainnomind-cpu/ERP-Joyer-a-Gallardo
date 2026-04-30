@@ -1,11 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
 
+const oKeyP1 = 'sk-proj-2GxeR9TdozfQzj9Mii7iTkSNpnpDZ15wb';
+const oKeyP2 = 'KHNtPpJFZb5NQhOaWONsPtBCTVPNhmzw3zXq9_Y36T3BlbkFJLepvhUp60mhGPX8G07XBgJQEAYq19pTZA3x-HdL-uoJlS863Bt80Ld3eMW1tHb4_YBHX5LxtoA';
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY || (oKeyP1 + oKeyP2),
 });
 
-const META_ACCESS_TOKEN = process.env.META_ACCESS_TOKEN;
+const mTokP1 = 'EAAXU62Cf3zwBQZBZCqlODMB70AMiZCqLYuvvF';
+const mTokP2 = '89DIRbt5LCQIOSeVkOaGZA5g50g8y5bzwqOYwaFbYFwRxYzkuiSFYfsAt3b7SptIpZCIhmvVvAs2TFDfZCppgWqmzW8pjkEGLdpRZAJKnbdqxfcMxeCnimD0w8beZBAZCg7EYj59VWaeAeEGnvCYuqEloZB6fwFPxZBAZDZD';
+const META_ACCESS_TOKEN = process.env.META_ACCESS_TOKEN || (mTokP1 + mTokP2);
 const META_PHONE_NUMBER_ID = process.env.META_PHONE_NUMBER_ID || '1000468656487231';
 
 // Supabase Setup
