@@ -25,6 +25,13 @@ async function sendWhatsAppMessage(to: string, text: string) {
     console.error('Meta credentials missing');
     return;
   }
+  
+  // Normalizar número de México (Meta WhatsApp API requiere quitar el 1)
+  let cleanTo = to;
+  if (cleanTo.startsWith('521') && cleanTo.length === 13) {
+    cleanTo = cleanTo.replace('521', '52');
+  }
+
   try {
     const res = await fetch(`https://graph.facebook.com/v17.0/${META_PHONE_NUMBER_ID}/messages`, {
       method: 'POST',
@@ -34,7 +41,7 @@ async function sendWhatsAppMessage(to: string, text: string) {
       },
       body: JSON.stringify({
         messaging_product: 'whatsapp',
-        to: to,
+        to: cleanTo,
         type: 'text',
         text: { body: text },
       }),

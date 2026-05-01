@@ -15,6 +15,11 @@ export default async function handler(req: any, res: any) {
     return res.status(500).json({ error: 'Meta credentials missing' });
   }
 
+  let cleanTo = to;
+  if (cleanTo.startsWith('521') && cleanTo.length === 13) {
+    cleanTo = cleanTo.replace('521', '52');
+  }
+
   try {
     const fetchRes = await fetch(`https://graph.facebook.com/v17.0/${META_PHONE_NUMBER_ID}/messages`, {
       method: 'POST',
@@ -24,7 +29,7 @@ export default async function handler(req: any, res: any) {
       },
       body: JSON.stringify({
         messaging_product: 'whatsapp',
-        to: to,
+        to: cleanTo,
         type: 'text',
         text: { body: text },
       }),
