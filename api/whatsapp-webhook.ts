@@ -204,6 +204,15 @@ export default async function handler(req: any, res: any) {
             // 1. Obtener o crear Chat
             let { data: chat } = await supabase.from('crm_chats').select('*').eq('phone_number', from).maybeSingle();
             
+            // --- FILTRO DE PALABRA MÁGICA PARA PRUEBAS COMPARTIDAS ---
+            const esPalabraMagica = msgBody.toLowerCase().includes('joyeria') || msgBody.toLowerCase().includes('joyería');
+            
+            if (!chat && !esPalabraMagica) {
+              console.log(`[WA] Ignorando mensaje de ${from}: No tiene chat activo en Joyería y no dijo la palabra mágica.`);
+              return res.status(200).json({ status: 'ignorado_por_palabra' });
+            }
+            // ---------------------------------------------------------
+
             let isFirstTime = false;
             if (!chat) {
               const { data: newChat } = await supabase.from('crm_chats').insert([{
