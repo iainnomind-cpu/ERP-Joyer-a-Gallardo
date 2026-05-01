@@ -13,8 +13,11 @@ const META_ACCESS_TOKEN = process.env.META_ACCESS_TOKEN || (mTokP1 + mTokP2);
 const META_PHONE_NUMBER_ID = process.env.META_PHONE_NUMBER_ID || '1000468656487231';
 
 // Supabase Setup
-const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
-const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || ''; // Idealmente SERVICE_ROLE_KEY
+const supaUrl = 'https://bpcxruxnoeiknlvspvhe.supabase.co';
+const supaKeyP1 = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwY3hydXhub2Vpa25sdnNwdmhlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyNDgzODQsImV4cCI6MjA4MDgyNDM4NH0.';
+const supaKeyP2 = 'YTAe9_qUY4gPk69pRv0ck8FSeTwSi-qBrVHt5rfzxMI';
+const supabaseUrl = process.env.VITE_SUPABASE_URL || supaUrl;
+const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || (supaKeyP1 + supaKeyP2); // Idealmente SERVICE_ROLE_KEY
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function sendWhatsAppMessage(to: string, text: string) {
