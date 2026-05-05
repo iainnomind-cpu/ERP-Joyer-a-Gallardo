@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Search, Phone, Bot, AlertTriangle, Send, User, CheckCircle2, MessageSquare, Paperclip, Smile, MapPin, MoreVertical, X, Save, Clock } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Search, Phone, Bot, AlertTriangle, Send, User, CheckCircle2, MessageSquare, Paperclip, Smile, MapPin, MoreVertical, X, Save, Clock, Image as ImageIcon, FileText } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface CurrentUser {
@@ -37,11 +37,22 @@ export default function InboxModule({ currentUser }: InboxModuleProps) {
   const [filter, setFilter] = useState<'all' | 'attention' | 'active'>('all');
   const [isUserInfoOpen, setIsUserInfoOpen] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showClipMenu, setShowClipMenu] = useState(false);
   const [editName, setEditName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [chats, setChats] = useState<Chat[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom of messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   useEffect(() => {
     fetchChats();
@@ -107,9 +118,10 @@ export default function InboxModule({ currentUser }: InboxModuleProps) {
     }
   };
 
-  const handleSendMessage = async () => {
-    if (!replyText.trim() || !selectedChat) return;
-    const textToSend = replyText.trim();
+  const handleSendMessage = async (textToSend: string = replyText, type: 'text' | 'image' | 'document' = 'text', url?: string) => {
+    if (!textToSend.trim() && !url) return;
+    if (!selectedChat) return;
+    
     setReplyText('');
     
     if (selectedChat.status === 'active') {
@@ -118,15 +130,56 @@ export default function InboxModule({ currentUser }: InboxModuleProps) {
       await supabase.from('crm_chats').update({ requires_attention: false }).eq('id', selectedChat.id);
     }
     
-    await supabase.from('crm_messages').insert([{ chat_id: selectedChat.id, content: textToSend, role: 'agent' }]);
+    const displayContent = type === 'text' ? textToSend : url || textToSend;
+    await supabase.from('crm_messages').insert([{ chat_id: selectedChat.id, content: displayContent, role: 'agent' }]);
+    
     fetchMessages(selectedChat.id);
     fetchChats();
     
     await fetch('/api/send-message', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to: selectedChat.phone_number, text: textToSend })
+      body: JSON.stringify({ to: selectedChat.phone_number, text: textToSend, type, url })
     });
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'document') => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedChat) return;
+
+    try {
+      setIsUploading(true);
+      setShowClipMenu(false);
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const filePath = `whatsapp/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage.from('chat-media').upload(filePath, file);
+      
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const { data: { publicUrl } } = supabase.storage.from('chat-media').getPublicUrl(filePath);
+      
+      await handleSendMessage(file.name, type, publicUrl);
+    } catch (err) {
+      console.error('Upload error:', err);
+      alert('Error al subir el archivo. Asegúrate de tener el bucket "chat-media" configurado en Supabase como público.');
+    } finally {
+      setIsUploading(false);
+      // Reset input
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  const handleSendLocation = async () => {
+    if (!selectedChat) return;
+    const ubicacionText = '💎 Joyería Gallardo\n📍 Paseo del Hospicio #65, locales A y B, Centro Joyero\n🗺️ https://www.google.com/maps/search/?api=1&query=Paseo+del+Hospicio+65+Guadalajara\n🕒 Lun-Vie 9am-6pm | Sáb 9am-3pm';
+    
+    if (window.confirm('¿Deseas enviar la ubicación de la joyería al cliente?')) {
+      await handleSendMessage(ubicacionText, 'text');
+    }
   };
 
   const handleResumeBot = async () => {
@@ -279,7 +332,19 @@ export default function InboxModule({ currentUser }: InboxModuleProps) {
                         ? 'bg-white border border-gray-200 text-gray-800 rounded-tl-none shadow-sm' 
                         : 'bg-amber-600 text-white rounded-tr-none shadow-sm'
                     }`}>
-                      <p className="text-sm">{msg.content}</p>
+                      {msg.content.startsWith('http') && (msg.content.includes('.jpg') || msg.content.includes('.png') || msg.content.includes('.jpeg')) ? (
+                        <div className="mb-2">
+                          <img src={msg.content} alt="Adjunto" className="max-w-full rounded-lg cursor-pointer" onClick={() => window.open(msg.content)} />
+                        </div>
+                      ) : msg.content.startsWith('http') ? (
+                        <div className="mb-2">
+                          <a href={msg.content} target="_blank" rel="noreferrer" className="underline font-medium break-all flex items-center gap-1">
+                            <FileText className="w-4 h-4" /> Ver Documento Adjunto
+                          </a>
+                        </div>
+                      ) : (
+                        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                      )}
                       <div className={`text-[10px] mt-1 text-right ${msg.role === 'user' ? 'text-gray-400' : 'text-amber-200'}`}>
                         {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         {msg.role === 'assistant' && ' • (Bot)'}
@@ -289,6 +354,7 @@ export default function InboxModule({ currentUser }: InboxModuleProps) {
                   )}
                 </div>
               ))}
+              <div ref={messagesEndRef} />
             </div>
 
             {/* Input Area */}
@@ -300,19 +366,48 @@ export default function InboxModule({ currentUser }: InboxModuleProps) {
                 </div>
               )}
               <div className="flex gap-2 items-center relative">
-                <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors" title="Adjuntar documento (Próximamente)">
+                {/* Popover Adjuntos */}
+                {showClipMenu && (
+                  <div className="absolute bottom-14 left-0 bg-white border border-gray-200 shadow-xl rounded-xl p-2 w-48 z-50">
+                    <button onClick={() => { fileInputRef.current?.click(); setShowClipMenu(false); }} className="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 text-gray-700 transition-colors rounded-lg text-left">
+                      <ImageIcon className="w-5 h-5 text-blue-500" />
+                      <span className="text-sm font-medium">Fotos y Videos</span>
+                    </button>
+                    <button onClick={() => { docInputRef.current?.click(); setShowClipMenu(false); }} className="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 text-gray-700 transition-colors rounded-lg text-left">
+                      <FileText className="w-5 h-5 text-purple-500" />
+                      <span className="text-sm font-medium">Documento</span>
+                    </button>
+                  </div>
+                )}
+                
+                {/* Inputs ocultos */}
+                <input type="file" ref={fileInputRef} onChange={(e) => handleFileUpload(e, 'image')} accept="image/*,video/*" className="hidden" />
+                <input type="file" ref={docInputRef} onChange={(e) => handleFileUpload(e, 'document')} className="hidden" />
+
+                <button 
+                  onClick={() => { setShowClipMenu(!showClipMenu); setShowEmojiPicker(false); }}
+                  disabled={isUploading}
+                  className={`p-2 rounded-lg transition-colors ${showClipMenu ? 'bg-amber-100 text-amber-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`} 
+                  title="Adjuntar archivo"
+                >
                   <Paperclip className="w-5 h-5" />
                 </button>
-                <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors hidden sm:block" title="Enviar ubicación (Próximamente)">
+                <button 
+                  onClick={() => { handleSendLocation(); setShowClipMenu(false); setShowEmojiPicker(false); }}
+                  disabled={isUploading}
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors hidden sm:block" 
+                  title="Enviar ubicación"
+                >
                   <MapPin className="w-5 h-5" />
                 </button>
                 <input
                   type="text"
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                  placeholder="Escribe un mensaje al cliente..."
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm"
+                  onKeyDown={(e) => e.key === 'Enter' && handleSendMessage(replyText, 'text')}
+                  placeholder={isUploading ? "Subiendo archivo..." : "Escribe un mensaje al cliente..."}
+                  disabled={isUploading}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
                 
                 {/* Emoji Picker Popover */}
@@ -349,8 +444,8 @@ export default function InboxModule({ currentUser }: InboxModuleProps) {
                   <Smile className="w-5 h-5" />
                 </button>
                 <button
-                  onClick={handleSendMessage}
-                  disabled={!replyText.trim()}
+                  onClick={() => handleSendMessage(replyText, 'text')}
+                  disabled={!replyText.trim() || isUploading}
                   className="px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:bg-amber-300 disabled:cursor-not-allowed text-white rounded-lg flex items-center gap-2 transition-colors"
                 >
                   <Send className="w-4 h-4" />

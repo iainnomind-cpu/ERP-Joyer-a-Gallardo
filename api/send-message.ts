@@ -5,7 +5,7 @@ export default async function handler(req: any, res: any) {
   
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   
-  const { to, text } = req.body;
+  const { to, text, type = 'text', url } = req.body;
   const mTokP1 = 'EAAXU62Cf3zwBQZBZCqlODMB70AMiZCqLYuvvF';
   const mTokP2 = '89DIRbt5LCQIOSeVkOaGZA5g50g8y5bzwqOYwaFbYFwRxYzkuiSFYfsAt3b7SptIpZCIhmvVvAs2TFDfZCppgWqmzW8pjkEGLdpRZAJKnbdqxfcMxeCnimD0w8beZBAZCg7EYj59VWaeAeEGnvCYuqEloZB6fwFPxZBAZDZD';
   const META_ACCESS_TOKEN = process.env.META_ACCESS_TOKEN || (mTokP1 + mTokP2);
@@ -21,18 +21,30 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
+    // Construir el payload de Meta según el tipo
+    const payload: any = {
+      messaging_product: 'whatsapp',
+      to: cleanTo,
+      type: type,
+    };
+
+    if (type === 'text') {
+      payload.text = { body: text };
+    } else if (type === 'image') {
+      payload.image = { link: url };
+      if (text) payload.image.caption = text;
+    } else if (type === 'document') {
+      payload.document = { link: url, filename: 'Documento' };
+      if (text) payload.document.caption = text;
+    }
+
     const fetchRes = await fetch(`https://graph.facebook.com/v17.0/${META_PHONE_NUMBER_ID}/messages`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${META_ACCESS_TOKEN}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to: cleanTo,
-        type: 'text',
-        text: { body: text },
-      }),
+      body: JSON.stringify(payload),
     });
     
     const data = await fetchRes.json();
