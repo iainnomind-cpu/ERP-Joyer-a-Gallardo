@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Phone, Bot, AlertTriangle, Send, User, CheckCircle2, MessageSquare } from 'lucide-react';
+import { Search, Phone, Bot, AlertTriangle, Send, User, CheckCircle2, MessageSquare, Paperclip, Smile, MapPin, MoreVertical, X, Save, Clock } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface CurrentUser {
@@ -34,7 +34,11 @@ interface InboxModuleProps {
 
 export default function InboxModule({ currentUser }: InboxModuleProps) {
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'all' | 'attention' | 'active'>('attention');
+  const [filter, setFilter] = useState<'all' | 'attention' | 'active'>('all');
+  const [isUserInfoOpen, setIsUserInfoOpen] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [chats, setChats] = useState<Chat[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -78,7 +82,30 @@ export default function InboxModule({ currentUser }: InboxModuleProps) {
     return true;
   });
 
+  const attentionCount = chats.filter(c => c.requires_attention).length;
+
   const selectedChat = chats.find(c => c.id === selectedChatId);
+
+  // Update edit states when chat changes
+  useEffect(() => {
+    if (selectedChat) {
+      setEditName(selectedChat.customer_name || '');
+    }
+  }, [selectedChatId, selectedChat?.customer_name]);
+
+  const handleSaveUserInfo = async () => {
+    if (!selectedChat || !editName.trim()) return;
+    setIsSaving(true);
+    try {
+      await supabase.from('crm_chats').update({ customer_name: editName.trim() }).eq('id', selectedChat.id);
+      fetchChats();
+      setIsUserInfoOpen(false);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleSendMessage = async () => {
     if (!replyText.trim() || !selectedChat) return;
@@ -120,13 +147,18 @@ export default function InboxModule({ currentUser }: InboxModuleProps) {
           <div className="flex gap-2 mb-4">
             <button
               onClick={() => setFilter('attention')}
-              className={`flex-1 py-1.5 px-3 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex-1 py-1.5 px-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
                 filter === 'attention' 
                   ? 'bg-amber-100 text-amber-800 border border-amber-200' 
                   : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
               }`}
             >
-              Requiere Atención
+              Atención
+              {attentionCount > 0 && (
+                <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                  {attentionCount}
+                </span>
+              )}
             </button>
             <button
               onClick={() => setFilter('all')}
@@ -220,8 +252,14 @@ export default function InboxModule({ currentUser }: InboxModuleProps) {
                     Reactivar Bot
                   </button>
                 )}
-                <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                <button 
+                  onClick={() => setIsUserInfoOpen(!isUserInfoOpen)}
+                  className={`p-2 rounded-lg transition-colors ${isUserInfoOpen ? 'bg-amber-100 text-amber-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
+                >
                   <User className="w-5 h-5" />
+                </button>
+                <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                  <MoreVertical className="w-5 h-5" />
                 </button>
               </div>
             </div>
@@ -261,7 +299,13 @@ export default function InboxModule({ currentUser }: InboxModuleProps) {
                   El bot está activo. Si envías un mensaje, el bot se pausará automáticamente para que puedas intervenir.
                 </div>
               )}
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-center relative">
+                <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors" title="Adjuntar documento (Próximamente)">
+                  <Paperclip className="w-5 h-5" />
+                </button>
+                <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors hidden sm:block" title="Enviar ubicación (Próximamente)">
+                  <MapPin className="w-5 h-5" />
+                </button>
                 <input
                   type="text"
                   value={replyText}
@@ -270,6 +314,40 @@ export default function InboxModule({ currentUser }: InboxModuleProps) {
                   placeholder="Escribe un mensaje al cliente..."
                   className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm"
                 />
+                
+                {/* Emoji Picker Popover */}
+                {showEmojiPicker && (
+                  <div className="absolute bottom-14 right-24 bg-white border border-gray-200 shadow-xl rounded-xl p-2 w-64 z-50">
+                    <div className="flex justify-between items-center mb-2 px-1">
+                      <span className="text-xs font-medium text-gray-500">Emojis rápidos</span>
+                      <button onClick={() => setShowEmojiPicker(false)} className="text-gray-400 hover:text-gray-600">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-6 gap-1">
+                      {['😊','😂','🥰','😍','🙏','👍','💎','💍','✨','🤍','📞','✅','📦','💳','🚚','📍','👋','🔥'].map(emoji => (
+                        <button
+                          key={emoji}
+                          onClick={() => {
+                            setReplyText(prev => prev + emoji);
+                            setShowEmojiPicker(false);
+                          }}
+                          className="hover:bg-gray-100 p-1.5 rounded text-lg flex items-center justify-center transition-colors"
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <button 
+                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                  className={`p-2 rounded-lg transition-colors ${showEmojiPicker ? 'bg-amber-100 text-amber-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`} 
+                  title="Emojis"
+                >
+                  <Smile className="w-5 h-5" />
+                </button>
                 <button
                   onClick={handleSendMessage}
                   disabled={!replyText.trim()}
@@ -282,8 +360,8 @@ export default function InboxModule({ currentUser }: InboxModuleProps) {
             </div>
           </>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-gray-500">
-            <MessageSquare className="w-16 h-16 text-gray-300 mb-4" />
+          <div className="flex-1 flex flex-col items-center justify-center text-gray-500 bg-white">
+            <MessageSquare className="w-16 h-16 text-gray-200 mb-4" />
             <p className="text-lg font-medium text-gray-600">Bandeja de Entrada</p>
             <p className="text-sm mt-1 text-center max-w-sm">
               Selecciona una conversación del panel izquierdo para ver los mensajes o responder.
@@ -291,6 +369,83 @@ export default function InboxModule({ currentUser }: InboxModuleProps) {
           </div>
         )}
       </div>
+
+      {/* Right Sidebar - User Info */}
+      {selectedChatId && selectedChat && isUserInfoOpen && (
+        <div className="w-80 border-l border-gray-200 bg-white flex flex-col">
+          <div className="h-16 px-4 border-b border-gray-200 flex items-center justify-between">
+            <h3 className="font-bold text-gray-900">Información del Cliente</h3>
+            <button 
+              onClick={() => setIsUserInfoOpen(false)}
+              className="p-1 text-gray-400 hover:text-gray-600 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          
+          <div className="p-6 flex-1 overflow-y-auto">
+            <div className="flex flex-col items-center mb-6">
+              <div className="w-20 h-20 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center text-2xl font-bold mb-3">
+                {selectedChat.customer_name ? selectedChat.customer_name.charAt(0).toUpperCase() : <User className="w-10 h-10" />}
+              </div>
+              <h4 className="font-bold text-lg text-gray-900 text-center">{selectedChat.customer_name || 'Desconocido'}</h4>
+              <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
+                <Phone className="w-4 h-4" /> {selectedChat.phone_number}
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Nombre en CRM</label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm"
+                  placeholder="Ej. Juan Pérez"
+                />
+              </div>
+
+              <button
+                onClick={handleSaveUserInfo}
+                disabled={isSaving || editName.trim() === selectedChat.customer_name}
+                className="w-full py-2 bg-gray-900 hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg flex items-center justify-center gap-2 text-sm font-medium transition-colors"
+              >
+                <Save className="w-4 h-4" />
+                {isSaving ? 'Guardando...' : 'Guardar Cambios'}
+              </button>
+            </div>
+
+            <div className="mt-8 pt-6 border-t border-gray-100">
+              <h5 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Actividad Reciente</h5>
+              
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center flex-shrink-0">
+                  <Clock className="w-4 h-4 text-blue-500" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Última interacción</p>
+                  <p className="text-xs text-gray-500">
+                    {new Date(selectedChat.last_message_at).toLocaleDateString()} a las {new Date(selectedChat.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-green-50 flex items-center justify-center flex-shrink-0">
+                  <MessageSquare className="w-4 h-4 text-green-500" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Estado del Bot</p>
+                  <p className="text-xs text-gray-500">
+                    {selectedChat.status === 'active' ? 'Activo y respondiendo' : 'Pausado (Atención manual)'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

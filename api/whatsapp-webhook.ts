@@ -47,7 +47,31 @@ async function sendWhatsAppMessage(to: string, text: string) {
       }),
     });
     const data = await res.json();
-    if (!res.ok) console.error('Error sending WA message:', data);
+    if (!res.ok) {
+      console.error('[Meta API Error] Error sending WA message:', JSON.stringify(data));
+      // Fallback: If parameter error and we modified the number, try with the original number
+      if (data?.error?.code === 131009 && cleanTo !== to) {
+        console.log(`[Meta Fallback] Retrying with original number: ${to}`);
+        const fbRes = await fetch(`https://graph.facebook.com/v17.0/${META_PHONE_NUMBER_ID}/messages`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${META_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            to: to,
+            type: 'text',
+            text: { body: text },
+          }),
+        });
+        const fbData = await fbRes.json();
+        if (!fbRes.ok) console.error('[Meta Fallback Error]:', JSON.stringify(fbData));
+        else console.log('[Meta Fallback Success]');
+      }
+    } else {
+      console.log(`[Meta Success] Message sent to ${cleanTo}`);
+    }
   } catch (e) {
     console.error('Fetch error sending WA message:', e);
   }

@@ -36,8 +36,13 @@ export default async function handler(req: any, res: any) {
     });
     
     const data = await fetchRes.json();
+    if (!fetchRes.ok) {
+      console.error('Meta API Error:', data);
+      return res.status(400).json({ error: 'Meta API Error', details: data });
+    }
     return res.status(200).json(data);
   } catch (e) {
+    console.error('Fetch exception:', e);
     return res.status(500).json({ error: String(e) });
   }
 }
