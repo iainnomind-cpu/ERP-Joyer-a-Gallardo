@@ -38,6 +38,7 @@ export default function InboxModule({ currentUser }: InboxModuleProps) {
   const [isUserInfoOpen, setIsUserInfoOpen] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showClipMenu, setShowClipMenu] = useState(false);
+  const [showOptionsMenu, setShowOptionsMenu] = useState(false);
   const [editName, setEditName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -88,6 +89,7 @@ export default function InboxModule({ currentUser }: InboxModuleProps) {
   };
 
   const filteredChats = chats.filter(chat => {
+    if (chat.status === 'archived') return false;
     if (filter === 'attention') return chat.requires_attention;
     if (filter === 'active') return chat.status === 'active';
     return true;
@@ -188,6 +190,20 @@ export default function InboxModule({ currentUser }: InboxModuleProps) {
     await supabase.from('crm_messages').insert([{ chat_id: selectedChat.id, content: 'El agente ha reactivado el asistente virtual.', role: 'system' }]);
     fetchChats();
     fetchMessages(selectedChat.id);
+  };
+
+  const handleDeleteChat = async () => {
+    if (!selectedChat) return;
+    const confirmDelete = window.confirm(
+      '¿Estás seguro de que deseas eliminar esta conversación del Inbox?\n\nLos datos del prospecto se mantendrán en el CRM.'
+    );
+    
+    if (confirmDelete) {
+      await supabase.from('crm_chats').update({ status: 'archived' }).eq('id', selectedChat.id);
+      setSelectedChatId(null);
+      setShowOptionsMenu(false);
+      fetchChats();
+    }
   };
 
   return (
@@ -311,9 +327,26 @@ export default function InboxModule({ currentUser }: InboxModuleProps) {
                 >
                   <User className="w-5 h-5" />
                 </button>
-                <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-                  <MoreVertical className="w-5 h-5" />
-                </button>
+                <div className="relative">
+                  <button 
+                    onClick={() => setShowOptionsMenu(!showOptionsMenu)}
+                    className={`p-2 rounded-lg transition-colors ${showOptionsMenu ? 'bg-gray-100 text-gray-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
+                  >
+                    <MoreVertical className="w-5 h-5" />
+                  </button>
+                  
+                  {showOptionsMenu && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 shadow-lg rounded-xl overflow-hidden z-50">
+                      <button 
+                        onClick={handleDeleteChat}
+                        className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 font-medium"
+                      >
+                        <AlertTriangle className="w-4 h-4" />
+                        Eliminar del Inbox
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
