@@ -89,7 +89,9 @@ export default function InboxModule({ currentUser }: InboxModuleProps) {
   };
 
   const filteredChats = chats.filter(chat => {
-    if (chat.status === 'archived') return false;
+    // Hide archived or resolved chats from the inbox
+    if (chat.status === 'archived' || chat.status === 'resolved') return false;
+    
     if (filter === 'attention') return chat.requires_attention;
     if (filter === 'active') return chat.status === 'active';
     return true;
@@ -199,7 +201,15 @@ export default function InboxModule({ currentUser }: InboxModuleProps) {
     );
     
     if (confirmDelete) {
-      await supabase.from('crm_chats').update({ status: 'archived' }).eq('id', selectedChat.id);
+      // Usamos 'resolved' ya que es un estado válido en la base de datos para archivar
+      const { error } = await supabase.from('crm_chats').update({ status: 'resolved' }).eq('id', selectedChat.id);
+      
+      if (error) {
+        alert('Hubo un error al intentar eliminar la conversación: ' + error.message);
+        console.error(error);
+        return;
+      }
+
       setSelectedChatId(null);
       setShowOptionsMenu(false);
       fetchChats();
