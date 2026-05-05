@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase, Customer, ChurnAlert, CreditTransaction } from '../../lib/supabase';
-import { UserPlus, Search, AlertTriangle, TrendingUp, Users, Phone, Edit2, Trash2, CreditCard, DollarSign, History, Plus, Minus, RefreshCw } from 'lucide-react';
+import { UserPlus, Search, AlertTriangle, TrendingUp, Users, Phone, Edit2, Trash2, CreditCard, DollarSign, History, Plus, Minus, RefreshCw, Clock } from 'lucide-react';
 import { ModulePermissions } from '../../lib/permissions';
 
 interface CurrentUser {
@@ -30,7 +30,9 @@ export default function CRMModule({ currentUser, permissions }: CRMModuleProps) 
   const [showEditModal, setShowEditModal] = useState(false);
   const [showCreditModal, setShowCreditModal] = useState(false);
   const [showCreditHistoryModal, setShowCreditHistoryModal] = useState(false);
+  const [showEditLeadModal, setShowEditLeadModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [editingLead, setEditingLead] = useState<any>(null);
   const [selectedCustomerForCredit, setSelectedCustomerForCredit] = useState<Customer | null>(null);
   const [creditTransactions, setCreditTransactions] = useState<CreditTransaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -238,6 +240,36 @@ export default function CRMModule({ currentUser, permissions }: CRMModuleProps) 
       loadCreditStats();
     } else {
       alert('Error al eliminar el cliente. Verifica que no tenga pedidos asociados.');
+    }
+  };
+
+  const handleDeleteLead = async (leadId: string) => {
+    const confirmDelete = window.confirm(
+      '¿Estás seguro de que deseas eliminar este prospecto (Lead) del CRM?\n\nEsta acción eliminará su registro por completo y no se puede deshacer.'
+    );
+    if (!confirmDelete) return;
+
+    const { error } = await supabase.from('crm_chats').delete().eq('id', leadId);
+    if (!error) {
+      loadLeads();
+    } else {
+      alert('Error al eliminar el prospecto: ' + error.message);
+    }
+  };
+
+  const handleEditLeadSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editingLead) return;
+    const formData = new FormData(e.currentTarget);
+    const newName = formData.get('name') as string;
+    
+    const { error } = await supabase.from('crm_chats').update({ customer_name: newName }).eq('id', editingLead.id);
+    if (!error) {
+      setShowEditLeadModal(false);
+      setEditingLead(null);
+      loadLeads();
+    } else {
+      alert('Error al actualizar el prospecto: ' + error.message);
     }
   };
 
@@ -661,26 +693,64 @@ export default function CRMModule({ currentUser, permissions }: CRMModuleProps) 
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teléfono</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Última Interacción</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado / Interés</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {leads.map(lead => (
                   <tr key={lead.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{lead.customer_name || 'Desconocido'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{lead.phone_number}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center font-bold mr-3 uppercase">
+                          {(lead.customer_name || 'D')[0]}
+                        </div>
+                        <span className="text-sm font-medium text-gray-900">{lead.customer_name || 'Desconocido'}</span>
+                      </div>
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(lead.last_message_at).toLocaleString()}
-                      <p className="text-xs text-gray-400 mt-1 truncate max-w-xs">{lead.last_message}</p>
+                      <div className="flex items-center">
+                        <Phone className="w-3 h-3 mr-1 text-gray-400" />
+                        {lead.phone_number}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
+                      <div className="flex flex-col">
+                        <span className="text-xs text-gray-500 mb-1 flex items-center gap-1 font-medium">
+                          <Clock className="w-3 h-3" />
+                          {new Date(lead.last_message_at).toLocaleDateString()} a las {new Date(lead.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                        <div className="text-sm text-gray-700 bg-gray-50 p-2 rounded-lg border border-gray-100 truncate max-w-sm">
+                          {lead.last_message}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-blue-50 text-blue-700 border border-blue-100">
                         {lead.bot_state}
                       </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex items-center justify-end space-x-3">
+                        <button 
+                          onClick={() => { setEditingLead(lead); setShowEditLeadModal(true); }} 
+                          className="text-blue-600 hover:text-blue-900 bg-blue-50 p-1.5 rounded-lg transition-colors" 
+                          title="Editar nombre"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteLead(lead.id)} 
+                          className="text-red-600 hover:text-red-900 bg-red-50 p-1.5 rounded-lg transition-colors" 
+                          title="Eliminar prospecto"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
                 {leads.length === 0 && (
-                  <tr><td colSpan={4} className="px-6 py-8 text-center text-gray-500">No hay leads registrados por el bot.</td></tr>
+                  <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-500">No hay leads registrados por el bot.</td></tr>
                 )}
               </tbody>
             </table>
@@ -1256,6 +1326,50 @@ export default function CRMModule({ currentUser, permissions }: CRMModuleProps) 
                 Cerrar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showEditLeadModal && editingLead && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <h3 className="text-xl font-bold text-gray-900 mb-4">Editar Prospecto</h3>
+            <form onSubmit={handleEditLeadSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del Prospecto</label>
+                <input
+                  type="text"
+                  name="name"
+                  defaultValue={editingLead.customer_name || ''}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono (Solo lectura)</label>
+                <input
+                  type="text"
+                  value={editingLead.phone_number}
+                  readOnly
+                  className="w-full px-3 py-2 border border-gray-300 bg-gray-50 rounded-lg text-gray-500 cursor-not-allowed"
+                />
+              </div>
+              <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => { setShowEditLeadModal(false); setEditingLead(null); }}
+                  className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
+                >
+                  Guardar Cambios
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
