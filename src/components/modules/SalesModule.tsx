@@ -59,7 +59,8 @@ export default function SalesModule({ currentUser, permissions }: SalesModulePro
   const [showSessionModal, setShowSessionModal] = useState(false);
   const [openingCash, setOpeningCash] = useState(1000);
   const [scannerInput, setScannerInput] = useState('');
-
+  const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
+  const [newCustomerData, setNewCustomerData] = useState({ name: '', phone: '', email: '' });
 
   const scannerRef = useRef<HTMLInputElement>(null);
 
@@ -388,12 +389,26 @@ export default function SalesModule({ currentUser, permissions }: SalesModulePro
 
   const handleScanBarcode = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && scannerInput) {
-      const product = products.find(p => p.sku === scannerInput.trim());
+      const searchStr = scannerInput.trim().toLowerCase();
+      // Buscar coincidencia exacta por SKU (insensible a mayúsculas)
+      let product = products.find(p => p.sku.toLowerCase() === searchStr);
+      
+      // Si no hay coincidencia exacta, buscar coincidencia parcial
+      if (!product) {
+        const partialMatches = products.filter(p => 
+          p.sku.toLowerCase().includes(searchStr) || 
+          p.name.toLowerCase().includes(searchStr)
+        );
+        if (partialMatches.length === 1) {
+          product = partialMatches[0];
+        }
+      }
+
       if (product) {
         addToCart(product);
         setScannerInput('');
       } else {
-        alert(`Producto no encontrado: ${scannerInput}`);
+        alert(`Producto no encontrado con SKU o nombre: ${scannerInput}`);
         setScannerInput('');
       }
     }
@@ -424,6 +439,33 @@ export default function SalesModule({ currentUser, permissions }: SalesModulePro
           ? { ...item, quantity: Math.min(quantity, product.total_stock) }
           : item
       ));
+    }
+  };
+
+  const handleQuickCreateCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCustomerData.name) return;
+
+    const { data, error } = await supabase
+      .from('customers')
+      .insert({
+        name: newCustomerData.name,
+        phone: newCustomerData.phone || null,
+        email: newCustomerData.email || null,
+        credit_limit: 0,
+        credit_used: 0,
+        credit_status: 'active'
+      })
+      .select()
+      .single();
+
+    if (!error && data) {
+      setCustomers([...customers, data].sort((a, b) => a.name.localeCompare(b.name)));
+      setSelectedCustomer(data);
+      setShowNewCustomerModal(false);
+      setNewCustomerData({ name: '', phone: '', email: '' });
+    } else {
+      alert('Error al crear cliente');
     }
   };
 
@@ -1691,8 +1733,8 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
       </div>
 
       {showNewOrderModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-lg max-w-6xl w-full p-6 my-8">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-6xl w-full p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h3 className="text-xl font-bold text-gray-900">
@@ -1736,9 +1778,18 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
 
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Cliente (Opcional)
-                  </label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Cliente (Opcional)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowNewCustomerModal(true)}
+                      className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1 font-medium"
+                    >
+                      <Plus className="w-4 h-4" /> Nuevo
+                    </button>
+                  </div>
                   <select
                     value={selectedCustomer?.id || ''}
                     onChange={(e) => {
@@ -1890,7 +1941,13 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
                     Productos Disponibles
                   </label>
                   <div className="border border-gray-200 rounded-lg max-h-64 overflow-y-auto">
-                    {products.map((product) => (
+                    {(scannerInput
+                      ? products.filter(p =>
+                          p.sku.toLowerCase().includes(scannerInput.trim().toLowerCase()) ||
+                          p.name.toLowerCase().includes(scannerInput.trim().toLowerCase())
+                        )
+                      : products
+                    ).map((product) => (
                       <div
                         key={product.id}
                         className="flex items-center justify-between p-3 border-b border-gray-100 hover:bg-gray-50"
@@ -2012,7 +2069,7 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
 
       {showPaymentModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-bold text-gray-900 mb-6">Procesar Pago</h3>
 
             <div className="bg-gray-50 rounded-lg p-4 mb-6">
@@ -2148,7 +2205,7 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
 
       {showSessionModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-bold text-gray-900 mb-6">Abrir Sesión de Caja</h3>
 
             <div className="space-y-4">
@@ -2240,7 +2297,7 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
 
       {showOrderDetails && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-2xl w-full p-6">
+          <div className="bg-white rounded-lg max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-bold text-gray-900">Detalles del Pedido #{showOrderDetails.order_number}</h3>
               <button
@@ -2473,7 +2530,7 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
       {/* ===== CASH MOVEMENT MODAL ===== */}
       {showCashMovementModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-md w-full">
+          <div className="bg-white rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-4 rounded-t-xl">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
@@ -2563,7 +2620,7 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
       {/* ===== SESSION HISTORY MODAL ===== */}
       {showSessionHistory && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-4xl w-full max-h-[85vh] overflow-hidden">
+          <div className="bg-white rounded-xl max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col">
             <div className="bg-gradient-to-r from-gray-700 to-gray-800 text-white px-6 py-4 rounded-t-xl">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
@@ -2629,6 +2686,63 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
           </div>
         </div>
       )}
+      {showNewCustomerModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-xl font-bold text-gray-900 mb-6">Nuevo Cliente Rápido</h3>
+            <form onSubmit={handleQuickCreateCustomer} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre Completo</label>
+                <input
+                  type="text"
+                  required
+                  value={newCustomerData.name}
+                  onChange={(e) => setNewCustomerData({ ...newCustomerData, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Ej. Juan Pérez"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono (Opcional)</label>
+                <input
+                  type="tel"
+                  value={newCustomerData.phone}
+                  onChange={(e) => setNewCustomerData({ ...newCustomerData, phone: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Ej. 3312345678"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email (Opcional)</label>
+                <input
+                  type="email"
+                  value={newCustomerData.email}
+                  onChange={(e) => setNewCustomerData({ ...newCustomerData, email: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="ejemplo@correo.com"
+                />
+              </div>
+              <div className="flex space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowNewCustomerModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={!newCustomerData.name}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                >
+                  Guardar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

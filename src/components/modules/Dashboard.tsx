@@ -35,13 +35,48 @@ export default function Dashboard({ currentUser }: DashboardProps) {
     recentOrders: [] as any[]
   });
   const [loading, setLoading] = useState(true);
+  const [dateFilter, setDateFilter] = useState('all'); // 'all', 'this_month', 'last_month', 'this_year', 'custom'
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
 
   useEffect(() => {
     loadDashboardData();
-  }, []);
+  }, [dateFilter, customStartDate, customEndDate]);
+
+  const getDateRange = () => {
+    const now = new Date();
+    if (dateFilter === 'this_month') {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      return { start, end: now.toISOString() };
+    }
+    if (dateFilter === 'last_month') {
+      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
+      const end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59).toISOString();
+      return { start, end };
+    }
+    if (dateFilter === 'this_year') {
+      const start = new Date(now.getFullYear(), 0, 1).toISOString();
+      return { start, end: now.toISOString() };
+    }
+    if (dateFilter === 'custom' && customStartDate && customEndDate) {
+      return { start: new Date(customStartDate).toISOString(), end: new Date(customEndDate + 'T23:59:59').toISOString() };
+    }
+    return null;
+  };
 
   const loadDashboardData = async () => {
     setLoading(true);
+
+    let customersQuery = supabase.from('customers').select('*', { count: 'exact' });
+    let ordersQuery = supabase.from('orders').select('*');
+    let recentOrdersQuery = supabase.from('orders').select('*, customers(name)').order('created_at', { ascending: false }).limit(5);
+
+    const range = getDateRange();
+    if (range) {
+      customersQuery = customersQuery.gte('created_at', range.start).lte('created_at', range.end);
+      ordersQuery = ordersQuery.gte('created_at', range.start).lte('created_at', range.end);
+      recentOrdersQuery = recentOrdersQuery.gte('created_at', range.start).lte('created_at', range.end);
+    }
 
     const [
       customersResult,
@@ -51,12 +86,12 @@ export default function Dashboard({ currentUser }: DashboardProps) {
       churnAlertsResult,
       recentOrdersResult
     ] = await Promise.all([
-      supabase.from('customers').select('*', { count: 'exact' }),
+      customersQuery,
       supabase.from('products').select('*'),
-      supabase.from('orders').select('*'),
+      ordersQuery,
       supabase.from('stock_alerts').select('*').eq('status', 'active'),
       supabase.from('churn_alerts').select('*').eq('status', 'pending'),
-      supabase.from('orders').select('*, customers(name)').order('created_at', { ascending: false }).limit(5)
+      recentOrdersQuery
     ]);
 
     const customers = customersResult.data || [];
@@ -120,18 +155,53 @@ export default function Dashboard({ currentUser }: DashboardProps) {
         </div>
       </div>
 
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">Dashboard General</h2>
-        <p className="text-gray-600 mt-1">Vista general del sistema ERP Gallardo Joyas</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Dashboard General</h2>
+          <p className="text-gray-600 mt-1">Vista general del sistema ERP Gallardo Joyas</p>
+        </div>
+        <div className="flex flex-col md:flex-row gap-2">
+          {dateFilter === 'custom' && (
+            <div className="flex space-x-2">
+              <input 
+                type="date" 
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              />
+              <input 
+                type="date" 
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              />
+            </div>
+          )}
+          <select
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 bg-white shadow-sm font-medium text-gray-700"
+          >
+            <option value="all">Histórico Completo</option>
+            <option value="this_month">Este Mes</option>
+            <option value="last_month">Mes Pasado</option>
+            <option value="this_year">Este Año</option>
+            <option value="custom">Rango Personalizado...</option>
+          </select>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-lg transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 font-medium">Total Clientes</p>
+              <p className="text-sm text-gray-600 font-medium">
+                {dateFilter === 'all' ? 'Total Clientes' : 'Nuevos Clientes'}
+              </p>
               <p className="text-3xl font-bold text-gray-900 mt-2">{stats.totalCustomers}</p>
-              <p className="text-xs text-gray-500 mt-2">Base de datos CRM</p>
+              <p className="text-xs text-gray-500 mt-2">
+                {dateFilter === 'all' ? 'Base de datos CRM' : 'En este periodo'}
+              </p>
             </div>
             <div className="w-14 h-14 bg-blue-100 rounded-lg flex items-center justify-center">
               <Users className="w-8 h-8 text-blue-600" />
@@ -174,7 +244,9 @@ export default function Dashboard({ currentUser }: DashboardProps) {
               <p className="text-3xl font-bold text-green-600 mt-2">
                 ${stats.totalRevenue.toLocaleString('es-MX')}
               </p>
-              <p className="text-xs text-gray-500 mt-2">Total histórico</p>
+              <p className="text-xs text-gray-500 mt-2">
+                {dateFilter === 'all' ? 'Total histórico' : 'En este periodo'}
+              </p>
             </div>
             <div className="w-14 h-14 bg-green-100 rounded-lg flex items-center justify-center">
               <DollarSign className="w-8 h-8 text-green-600" />
