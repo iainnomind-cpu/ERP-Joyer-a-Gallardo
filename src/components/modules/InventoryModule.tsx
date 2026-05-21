@@ -27,6 +27,8 @@ export default function InventoryModule({ currentUser, permissions }: InventoryM
   const [stockAlerts, setStockAlerts] = useState<StockAlert[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMaterial, setFilterMaterial] = useState<string>('all');
+  const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [materials, setMaterials] = useState<string[]>(['Plata Pura', 'Baño de Oro']);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<string | null>(null);
@@ -38,6 +40,10 @@ export default function InventoryModule({ currentUser, permissions }: InventoryM
   const [movements, setMovements] = useState<any[]>([]);
   const [labelQuantity, setLabelQuantity] = useState(1);
   const [autoGenerateSKU, setAutoGenerateSKU] = useState(false);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [editingCategoryName, setEditingCategoryName] = useState('');
+  const [newCategoryName, setNewCategoryName] = useState('');
 
   const [labelConfig, setLabelConfig] = useState({
     size: '62x29' as '62x29' | '62x39' | '62x50' | '29x90',
@@ -65,6 +71,8 @@ export default function InventoryModule({ currentUser, permissions }: InventoryM
     if (!error && data) {
       setProducts(data);
       checkStockLevels(data);
+      const uniqueMaterials = Array.from(new Set(['Plata Pura', 'Baño de Oro', ...data.map(p => p.material).filter(Boolean)]));
+      setMaterials(uniqueMaterials);
     }
     setLoading(false);
   };
@@ -75,7 +83,7 @@ export default function InventoryModule({ currentUser, permissions }: InventoryM
   };
 
   const handleAddCategory = async () => {
-    const name = window.prompt('Ingrese el nombre de la nueva categoría:');
+    const name = newCategoryName.trim() || window.prompt('Ingrese el nombre de la nueva categoría:');
     if (!name || name.trim() === '') return;
     
     // Convert to simple slug
@@ -85,8 +93,49 @@ export default function InventoryModule({ currentUser, permissions }: InventoryM
     if (error) {
        window.alert('Error al crear categoría: ' + error.message);
     } else {
+       setNewCategoryName('');
        await loadCategories();
-       window.alert('Categoría creada exitosamente.');
+       if (!showCategoryManager) window.alert('Categoría creada exitosamente.');
+    }
+  };
+
+  const handleEditCategory = async (id: string) => {
+    if (!editingCategoryName.trim()) return;
+    const slug = editingCategoryName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
+    const { error } = await supabase.from('categories').update({ name: editingCategoryName.trim(), slug }).eq('id', id);
+    if (error) {
+      window.alert('Error al actualizar categoría: ' + error.message);
+    } else {
+      setEditingCategoryId(null);
+      setEditingCategoryName('');
+      await loadCategories();
+    }
+  };
+
+  const handleAddMaterial = () => {
+    const name = window.prompt('Ingrese el nuevo material:');
+    if (name && name.trim() !== '') {
+      const newMaterial = name.trim();
+      if (!materials.includes(newMaterial)) {
+        setMaterials([...materials, newMaterial]);
+        window.alert('Material agregado. Podrá seleccionarlo en la lista.');
+      }
+    }
+  };
+
+  const handleDeleteCategory = async (id: string, name: string) => {
+    // Check if any products use this category
+    const { data: usedProducts } = await supabase.from('products').select('id').eq('category', name).limit(1);
+    if (usedProducts && usedProducts.length > 0) {
+      window.alert(`No se puede eliminar "${name}" porque hay productos asignados a esta categoría. Cambie la categoría de esos productos primero.`);
+      return;
+    }
+    if (!confirm(`¿Está seguro de eliminar la categoría "${name}"?`)) return;
+    const { error } = await supabase.from('categories').delete().eq('id', id);
+    if (error) {
+      window.alert('Error al eliminar categoría: ' + error.message);
+    } else {
+      await loadCategories();
     }
   };
 
@@ -685,7 +734,8 @@ export default function InventoryModule({ currentUser, permissions }: InventoryM
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          p.sku.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesMaterial = filterMaterial === 'all' || p.material === filterMaterial;
-    return matchesSearch && matchesMaterial;
+    const matchesCategory = filterCategory === 'all' || p.category === filterCategory;
+    return matchesSearch && matchesMaterial && matchesCategory;
   });
 
   const stats = {
@@ -703,13 +753,22 @@ export default function InventoryModule({ currentUser, permissions }: InventoryM
           <p className="text-gray-600 mt-1">Control de existencias y catálogo digital</p>
         </div>
         {canCreate && (
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center space-x-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Nuevo Producto</span>
-          </button>
+          <div className="flex space-x-2">
+            <button
+              onClick={() => setShowCategoryManager(true)}
+              className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors border border-gray-300"
+            >
+              <Edit className="w-4 h-4" />
+              <span>Categorías</span>
+            </button>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="flex items-center space-x-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Nuevo Producto</span>
+            </button>
+          </div>
         )}
       </div>
 
@@ -801,60 +860,59 @@ export default function InventoryModule({ currentUser, permissions }: InventoryM
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
             />
           </div>
-          <div className="flex space-x-2">
-            <button
-              onClick={() => setFilterMaterial('all')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                filterMaterial === 'all' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-700'
-              }`}
+          <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
+            <select
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
             >
-              Todos
-            </button>
-            <button
-              onClick={() => setFilterMaterial('Plata Pura')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                filterMaterial === 'Plata Pura' ? 'bg-gray-200 text-gray-900' : 'bg-gray-100 text-gray-700'
-              }`}
+              <option value="all">Todas las Categorías</option>
+              {categories.map(cat => (
+                <option key={cat.id} value={cat.name}>{cat.name}</option>
+              ))}
+            </select>
+            <select
+              value={filterMaterial}
+              onChange={(e) => setFilterMaterial(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
             >
-              Plata Pura
-            </button>
-            <button
-              onClick={() => setFilterMaterial('Baño de Oro')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                filterMaterial === 'Baño de Oro' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-700'
-              }`}
-            >
-              Baño de Oro
-            </button>
+              <option value="all">Todos los Materiales</option>
+              {materials.map(mat => (
+                <option key={mat} value={mat}>{mat}</option>
+              ))}
+            </select>
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full min-w-[1100px] table-fixed">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="w-24 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                   SKU
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="w-full px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Producto
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="w-32 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  Categoría
+                </th>
+                <th className="w-32 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                   Material
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="w-32 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                   Precio Menudeo
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="w-32 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                   Precio Mayoreo
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="w-36 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                   Almacén / GJ / L2
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="w-24 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                   Total
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="w-32 px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap sticky right-0 bg-gray-50 shadow-sm z-10">
                   Acciones
                 </th>
               </tr>
@@ -862,13 +920,13 @@ export default function InventoryModule({ currentUser, permissions }: InventoryM
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
                     Cargando productos...
                   </td>
                 </tr>
               ) : filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
                     No se encontraron productos
                   </td>
                 </tr>
@@ -885,6 +943,9 @@ export default function InventoryModule({ currentUser, permissions }: InventoryM
                           Línea Base
                         </span>
                       )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {product.category || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 py-1 text-xs rounded-full ${
@@ -943,7 +1004,7 @@ export default function InventoryModule({ currentUser, permissions }: InventoryM
                         {product.total_stock}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-4 whitespace-nowrap text-right sticky right-0 bg-white shadow-[auto] z-10">
                       {editingProduct === product.id ? (
                         <div className="flex space-x-2">
                           <button
@@ -1087,14 +1148,26 @@ export default function InventoryModule({ currentUser, permissions }: InventoryM
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Material</label>
-                  <select
-                    name="material"
-                    required
-                    className="w-full px-2 sm:px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                  >
-                    <option value="Plata Pura">Plata Pura</option>
-                    <option value="Baño de Oro">Baño de Oro</option>
-                  </select>
+                  <div className="flex space-x-2">
+                    <select
+                      name="material"
+                      required
+                      className="w-full px-2 sm:px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent flex-1"
+                    >
+                      <option value="">Seleccione...</option>
+                      {materials.map(mat => (
+                        <option key={mat} value={mat}>{mat}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={handleAddMaterial}
+                      className="p-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200"
+                      title="Nuevo Material"
+                    >
+                      <Plus className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Categoría</label>
@@ -1279,15 +1352,29 @@ export default function InventoryModule({ currentUser, permissions }: InventoryM
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Material</label>
-                  <select
-                    name="material"
-                    required
-                    defaultValue={editingFullProduct.material}
-                    className="w-full px-2 sm:px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="Plata Pura">Plata Pura</option>
-                    <option value="Baño de Oro">Baño de Oro</option>
-                  </select>
+                  <div className="flex space-x-2">
+                    <select
+                      name="material"
+                      required
+                      defaultValue={editingFullProduct.material}
+                      className="w-full px-2 sm:px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent flex-1"
+                    >
+                      {materials.map(mat => (
+                        <option key={mat} value={mat}>{mat}</option>
+                      ))}
+                      {!materials.includes(editingFullProduct.material) && (
+                        <option value={editingFullProduct.material}>{editingFullProduct.material}</option>
+                      )}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={handleAddMaterial}
+                      className="p-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200"
+                      title="Nuevo Material"
+                    >
+                      <Plus className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Categoría</label>
@@ -1857,6 +1944,129 @@ export default function InventoryModule({ currentUser, permissions }: InventoryM
                 <Printer className="w-4 h-4" />
                 <span>Imprimir {labelQuantity > 1 ? `${labelQuantity} Etiquetas` : 'Etiqueta'}</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== CATEGORY MANAGER MODAL ===== */}
+      {showCategoryManager && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-amber-500 to-amber-600 text-white px-6 py-4 rounded-t-xl">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <Package className="w-6 h-6" />
+                  <div>
+                    <h3 className="text-lg font-bold">Gestión de Categorías</h3>
+                    <p className="text-amber-100 text-sm">{categories.length} categorías registradas</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowCategoryManager(false);
+                    setEditingCategoryId(null);
+                    setEditingCategoryName('');
+                    setNewCategoryName('');
+                  }}
+                  className="text-white hover:text-amber-200"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* Add new category */}
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleAddCategory(); }}
+                  placeholder="Nombre de la nueva categoría..."
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                />
+                <button
+                  onClick={handleAddCategory}
+                  disabled={!newCategoryName.trim()}
+                  className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Agregar</span>
+                </button>
+              </div>
+
+              {/* Categories list */}
+              <div className="border border-gray-200 rounded-lg divide-y divide-gray-200">
+                {categories.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <Package className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+                    <p>No hay categorías registradas</p>
+                    <p className="text-sm">Agrega una categoría para empezar</p>
+                  </div>
+                ) : (
+                  categories.map((cat) => (
+                    <div key={cat.id} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
+                      {editingCategoryId === cat.id ? (
+                        <div className="flex items-center space-x-2 flex-1">
+                          <input
+                            type="text"
+                            value={editingCategoryName}
+                            onChange={(e) => setEditingCategoryName(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleEditCategory(cat.id); if (e.key === 'Escape') { setEditingCategoryId(null); setEditingCategoryName(''); } }}
+                            className="flex-1 px-3 py-1.5 border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 text-sm"
+                            autoFocus
+                          />
+                          <button
+                            onClick={() => handleEditCategory(cat.id)}
+                            className="p-1.5 bg-green-100 text-green-700 rounded-lg hover:bg-green-200"
+                            title="Guardar"
+                          >
+                            <Save className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => { setEditingCategoryId(null); setEditingCategoryName(''); }}
+                            className="p-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200"
+                            title="Cancelar"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center space-x-3">
+                            <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">
+                              <span className="text-amber-700 font-bold text-sm">{cat.name.charAt(0).toUpperCase()}</span>
+                            </div>
+                            <span className="font-medium text-gray-900">{cat.name}</span>
+                          </div>
+                          <div className="flex items-center space-x-1">
+                            <button
+                              onClick={() => { setEditingCategoryId(cat.id); setEditingCategoryName(cat.name); }}
+                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
+                              title="Renombrar"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCategory(cat.id, cat.name)}
+                              className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"
+                              title="Eliminar"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <p className="text-xs text-gray-500 text-center">
+                Las categorías asignadas a productos no se pueden eliminar hasta que se reasignen.
+              </p>
             </div>
           </div>
         </div>
