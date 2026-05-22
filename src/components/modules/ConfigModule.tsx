@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, BusinessRule, User } from '../../lib/supabase';
-import { Settings, DollarSign, AlertCircle, Save, Edit2, X, Users, Plus, Check, Shield } from 'lucide-react';
+import { Settings, DollarSign, AlertCircle, Save, Edit2, X, Users, Plus, Check, Shield, Trash2, FileText } from 'lucide-react';
 import { PermissionsMap, ModulePermissions, getDefaultPermissions, ALL_MODULES, MODULE_LABELS, RoleId } from '../../lib/permissions';
 
 interface CurrentUser {
@@ -45,6 +45,16 @@ export default function ConfigModule({ currentUser }: ConfigModuleProps) {
       .order('rule_name', { ascending: true });
 
     if (!error && data) {
+      if (!data.some(r => r.rule_key === 'ticket_header')) {
+        const { data: newRule } = await supabase.from('business_rules').insert({
+          rule_key: 'ticket_header',
+          rule_name: 'Encabezado de Ticket',
+          description: 'Texto que aparece en la parte superior de los tickets y cotizaciones',
+          rule_value: { text: "Gallardo Joyas | Fabricantes de joyería en chapa de oro 14k, creando piezas con diseño, calidad y acabados cuidadosamente elaborados." },
+          is_active: true
+        }).select().single();
+        if (newRule) data.push(newRule);
+      }
       setRules(data);
     }
     setLoading(false);
@@ -214,108 +224,122 @@ export default function ConfigModule({ currentUser }: ConfigModuleProps) {
             if (rule.rule_key !== 'wholesale_threshold') return null;
 
             const isEditing = editingRule === rule.id;
-            // Default structure if undefined or old format
-            const rv = {
-              condition_type: rule.rule_value?.condition_type || 'amount',
-              threshold: rule.rule_value?.threshold || rule.rule_value?.amount || 3000,
-              enable_extra_discount: rule.rule_value?.enable_extra_discount || false,
-              extra_discount_threshold: rule.rule_value?.extra_discount_threshold || 5000,
-              extra_discount_percentage: rule.rule_value?.extra_discount_percentage || 10
-            };
+
+            return (
+              <div key={rule.id} className="space-y-4">
+                <div>
+                  {isEditing ? (
+                    <WholesaleRuleEditor
+                      rule={rule}
+                      onSave={(id, val) => handleUpdateRule(id, val)}
+                      onCancel={() => setEditingRule(null)}
+                    />
+                  ) : (
+                    <div>
+                      <div className="flex items-baseline justify-between mb-3 border border-amber-100 bg-amber-50 p-4 rounded-xl relative overflow-hidden">
+                        <div className="absolute right-0 top-0 w-24 h-24 bg-amber-200/50 rounded-bl-full -z-0"></div>
+                        <div className="relative z-10 w-full">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="text-xs font-bold text-amber-800 uppercase tracking-wide mb-1">Mayoreo Base</p>
+                              <span className="text-3xl font-bold text-amber-600">
+                                {rule.rule_value?.condition_type === 'amount' ? `$${(rule.rule_value?.threshold || 3000).toLocaleString('es-MX')}` : `${rule.rule_value?.threshold || 3} Piezas`}
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => setEditingRule(rule.id)}
+                              className="text-amber-600 hover:text-amber-800 bg-white p-2 rounded-full shadow-sm"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          {rule.rule_value?.enable_tiers && rule.rule_value?.tiers?.length > 0 && (
+                            <div className="mt-4 pt-3 border-t border-amber-200/60">
+                              <p className="text-xs font-bold text-amber-900 mb-2">Niveles de Descuento Activos:</p>
+                              <div className="space-y-2">
+                                {rule.rule_value.tiers.map((t: any) => (
+                                  <div key={t.id} className="flex justify-between items-center text-sm bg-white/60 p-2 rounded">
+                                    <span className="font-medium text-amber-900">{t.name}</span>
+                                    <div className="flex items-center space-x-2">
+                                      <span className="font-bold text-amber-700">{t.discount_percentage}%</span>
+                                      {t.free_shipping && <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-bold">ENVÍO GRATIS</span>}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-600">
+                        Configuración de umbral de mayoreo y múltiples niveles de descuento escalonados.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+                  <span className="text-sm text-gray-700">Estado de la regla</span>
+                  <button
+                    onClick={() => handleToggleActive(rule.id, rule.is_active)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${rule.is_active
+                      ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                  >
+                    {rule.is_active ? 'Activa' : 'Inactiva'}
+                  </button>
+                </div>
+
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-600">
+                    <span className="font-medium">Última actualización:</span>{' '}
+                    {new Date(rule.updated_at).toLocaleString('es-MX')}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="flex items-center space-x-3 mb-4">
+            <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
+              <FileText className="w-6 h-6 text-indigo-600" />
+            </div>
+            <div>
+              <h3 className="font-bold text-gray-900">Encabezado de Ticket</h3>
+              <p className="text-sm text-gray-600">Texto que aparece en tickets y cotizaciones</p>
+            </div>
+          </div>
+
+          {rules.map((rule) => {
+            if (rule.rule_key !== 'ticket_header') return null;
+
+            const isEditing = editingRule === rule.id;
 
             return (
               <div key={rule.id} className="space-y-4">
                 <div>
                   {isEditing ? (
                     <div className="space-y-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
-
-                      {/* Tipo de condición */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Aplicar mayoreo por:
+                          Texto del Encabezado
                         </label>
-                        <select
-                          id={`cond-${rule.id}`}
-                          defaultValue={rv.condition_type}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
-                        >
-                          <option value="amount">Monto en pesos ($)</option>
-                          <option value="pieces">Número de Piezas</option>
-                        </select>
-                      </div>
-
-                      {/* Meta / Umbral */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Cantidad requerida para mayoreo
-                        </label>
-                        <input
-                          type="number"
-                          id={`thresh-${rule.id}`}
-                          defaultValue={rv.threshold}
-                          min="1"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
+                        <textarea
+                          id={`ticket-header-${rule.id}`}
+                          defaultValue={rule.rule_value?.text || ''}
+                          rows={4}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                         />
                       </div>
-
-                      <div className="border-t pt-4 mt-2">
-                        <div className="flex items-center mb-3">
-                          <input
-                            type="checkbox"
-                            id={`extra-disc-${rule.id}`}
-                            defaultChecked={rv.enable_extra_discount}
-                            className="w-4 h-4 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
-                          />
-                          <label htmlFor={`extra-disc-${rule.id}`} className="ml-2 text-sm font-bold text-amber-900">
-                            Habilitar Descuento Extra Automático
-                          </label>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">
-                              Al superar ($ o pzas)
-                            </label>
-                            <input
-                              type="number"
-                              id={`extra-thresh-${rule.id}`}
-                              defaultValue={rv.extra_discount_threshold}
-                              min="1"
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 text-sm"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">
-                              % de Descuento
-                            </label>
-                            <input
-                              type="number"
-                              id={`extra-pct-${rule.id}`}
-                              defaultValue={rv.extra_discount_percentage}
-                              min="1"
-                              max="100"
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 text-sm"
-                            />
-                          </div>
-                        </div>
-                      </div>
-
                       <div className="flex space-x-2 pt-2">
                         <button
                           onClick={() => {
-                            const cond = (document.getElementById(`cond-${rule.id}`) as HTMLSelectElement).value;
-                            const thresh = parseInt((document.getElementById(`thresh-${rule.id}`) as HTMLInputElement).value) || 0;
-                            const enableExtra = (document.getElementById(`extra-disc-${rule.id}`) as HTMLInputElement).checked;
-                            const extraThresh = parseInt((document.getElementById(`extra-thresh-${rule.id}`) as HTMLInputElement).value) || 0;
-                            const extraPct = parseInt((document.getElementById(`extra-pct-${rule.id}`) as HTMLInputElement).value) || 0;
-
-                            handleUpdateRule(rule.id, {
-                              condition_type: cond,
-                              threshold: thresh,
-                              enable_extra_discount: enableExtra,
-                              extra_discount_threshold: extraThresh,
-                              extra_discount_percentage: extraPct
-                            });
+                            const val = (document.getElementById(`ticket-header-${rule.id}`) as HTMLTextAreaElement).value;
+                            handleUpdateRule(rule.id, { text: val });
                           }}
                           className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
                         >
@@ -332,36 +356,23 @@ export default function ConfigModule({ currentUser }: ConfigModuleProps) {
                     </div>
                   ) : (
                     <div>
-                      <div className="flex items-baseline justify-between mb-3 border border-amber-100 bg-amber-50 p-4 rounded-xl relative overflow-hidden">
-                        <div className="absolute right-0 top-0 w-24 h-24 bg-amber-200/50 rounded-bl-full -z-0"></div>
+                      <div className="flex items-baseline justify-between mb-3 border border-indigo-100 bg-indigo-50 p-4 rounded-xl relative overflow-hidden">
                         <div className="relative z-10 w-full">
                           <div className="flex justify-between items-start">
-                            <div>
-                              <p className="text-xs font-bold text-amber-800 uppercase tracking-wide mb-1">Condición Actual</p>
-                              <span className="text-3xl font-bold text-amber-600">
-                                {rv.condition_type === 'amount' ? `$${rv.threshold.toLocaleString('es-MX')}` : `${rv.threshold} Piezas`}
-                              </span>
+                            <div className="pr-8">
+                              <p className="text-sm font-medium text-indigo-900 whitespace-pre-wrap">
+                                {rule.rule_value?.text || 'Sin configurar'}
+                              </p>
                             </div>
                             <button
                               onClick={() => setEditingRule(rule.id)}
-                              className="text-amber-600 hover:text-amber-800 bg-white p-2 rounded-full shadow-sm"
+                              className="text-indigo-600 hover:text-indigo-800 bg-white p-2 rounded-full shadow-sm"
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>
                           </div>
-
-                          {rv.enable_extra_discount && (
-                            <div className="mt-3 pt-3 border-t border-amber-200/60 flex items-center justify-between">
-                              <div>
-                                <p className="text-xs text-amber-900 line-clamp-1"><span className="font-bold">Descuento Extra:</span> {rv.extra_discount_percentage}% al superar {rv.condition_type === 'amount' ? `$${rv.extra_discount_threshold.toLocaleString()}` : `${rv.extra_discount_threshold} pzas`}</p>
-                              </div>
-                            </div>
-                          )}
                         </div>
                       </div>
-                      <p className="text-sm text-gray-600">
-                        Al alcanzar esta meta se aplican los precios de la lista de Mayoreo.
-                      </p>
                     </div>
                   )}
                 </div>
@@ -908,6 +919,179 @@ export default function ConfigModule({ currentUser }: ConfigModuleProps) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function WholesaleRuleEditor({ rule, onSave, onCancel }: { rule: BusinessRule, onSave: (id: string, val: any) => void, onCancel: () => void }) {
+  const [rv, setRv] = useState<any>(() => {
+    return {
+      condition_type: rule.rule_value?.condition_type || 'amount',
+      threshold: rule.rule_value?.threshold || rule.rule_value?.amount || 3000,
+      enable_tiers: rule.rule_value?.enable_tiers ?? true,
+      tiers: rule.rule_value?.tiers || [
+        { id: "tier-1", name: "De 3 juegos a $2,999 MXN", min_pieces: 3, min_amount: 0, discount_percentage: 10, free_shipping: false },
+        { id: "tier-2", name: "$3,000 a $4,999 MXN", min_pieces: 0, min_amount: 3000, discount_percentage: 14, free_shipping: false },
+        { id: "tier-3", name: "$5,000 a $9,999 MXN", min_pieces: 0, min_amount: 5000, discount_percentage: 17, free_shipping: true },
+        { id: "tier-4", name: "$10,000 MXN o más", min_pieces: 0, min_amount: 10000, discount_percentage: 20, free_shipping: true }
+      ]
+    };
+  });
+
+  const updateTier = (id: string, field: string, value: any) => {
+    setRv((prev: any) => ({
+      ...prev,
+      tiers: prev.tiers.map((t: any) => t.id === id ? { ...t, [field]: value } : t)
+    }));
+  };
+
+  const removeTier = (id: string) => {
+    setRv((prev: any) => ({
+      ...prev,
+      tiers: prev.tiers.filter((t: any) => t.id !== id)
+    }));
+  };
+
+  const addTier = () => {
+    setRv((prev: any) => ({
+      ...prev,
+      tiers: [...prev.tiers, { id: `tier-${Date.now()}`, name: "Nuevo Nivel", min_pieces: 0, min_amount: 0, discount_percentage: 0, free_shipping: false }]
+    }));
+  };
+
+  return (
+    <div className="space-y-6 bg-gray-50 p-6 rounded-lg border border-gray-200">
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Aplicar mayoreo base por:</label>
+          <select
+            value={rv.condition_type}
+            onChange={e => setRv({...rv, condition_type: e.target.value})}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
+          >
+            <option value="amount">Monto en pesos ($)</option>
+            <option value="pieces">Número de Piezas</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Cantidad para mayoreo base</label>
+          <input
+            type="number"
+            value={rv.threshold}
+            onChange={e => setRv({...rv, threshold: Number(e.target.value)})}
+            min="1"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
+          />
+        </div>
+      </div>
+
+      <div className="border-t pt-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              checked={rv.enable_tiers}
+              onChange={e => setRv({...rv, enable_tiers: e.target.checked})}
+              className="w-4 h-4 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+            />
+            <label className="ml-2 text-sm font-bold text-amber-900">
+              Habilitar Niveles de Descuento (Tiers)
+            </label>
+          </div>
+          {rv.enable_tiers && (
+            <button
+              onClick={addTier}
+              className="flex items-center space-x-1 px-3 py-1.5 bg-amber-100 text-amber-700 hover:bg-amber-200 rounded-lg text-sm font-medium"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Agregar Nivel</span>
+            </button>
+          )}
+        </div>
+
+        {rv.enable_tiers && (
+          <div className="space-y-4">
+            {rv.tiers.map((tier: any) => (
+              <div key={tier.id} className="bg-white p-4 rounded border border-gray-200 relative">
+                <button
+                  onClick={() => removeTier(tier.id)}
+                  className="absolute top-2 right-2 text-red-500 hover:text-red-700 p-1 bg-white rounded-full"
+                  title="Eliminar nivel"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3 pr-8">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Nombre del Nivel</label>
+                    <input
+                      type="text"
+                      value={tier.name}
+                      onChange={e => updateTier(tier.id, 'name', e.target.value)}
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-amber-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">% de Descuento</label>
+                    <input
+                      type="number"
+                      value={tier.discount_percentage}
+                      onChange={e => updateTier(tier.id, 'discount_percentage', Number(e.target.value))}
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-amber-500"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Mínimo Piezas</label>
+                    <input
+                      type="number"
+                      value={tier.min_pieces}
+                      onChange={e => updateTier(tier.id, 'min_pieces', Number(e.target.value))}
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-amber-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Mínimo Monto ($)</label>
+                    <input
+                      type="number"
+                      value={tier.min_amount}
+                      onChange={e => updateTier(tier.id, 'min_amount', Number(e.target.value))}
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-amber-500"
+                    />
+                  </div>
+                  <div className="flex items-end pb-1">
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={tier.free_shipping}
+                        onChange={e => updateTier(tier.id, 'free_shipping', e.target.checked)}
+                        className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                      />
+                      <span className="ml-2 text-xs font-medium text-green-700">Envío Gratis</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex space-x-2 pt-4 border-t border-gray-200">
+        <button
+          onClick={() => onSave(rule.id, rv)}
+          className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+        >
+          <Save className="w-4 h-4" />
+          <span>Guardar Cambios</span>
+        </button>
+        <button
+          onClick={onCancel}
+          className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
     </div>
   );
 }

@@ -44,7 +44,9 @@ export default function SalesModule({ currentUser, permissions }: SalesModulePro
     threshold: 3000,
     enable_extra_discount: false,
     extra_discount_threshold: 5000,
-    extra_discount_percentage: 10
+    extra_discount_percentage: 10,
+    enable_tiers: false,
+    tiers: [] as any[]
   });
   const [showNewOrderModal, setShowNewOrderModal] = useState(false);
   const [showOrderDetails, setShowOrderDetails] = useState<Order | null>(null);
@@ -60,7 +62,7 @@ export default function SalesModule({ currentUser, permissions }: SalesModulePro
   const [openingCash, setOpeningCash] = useState(1000);
   const [scannerInput, setScannerInput] = useState('');
   const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
-  const [newCustomerData, setNewCustomerData] = useState({ name: '', phone: '', email: '' });
+  const [newCustomerData, setNewCustomerData] = useState({ name: '', phone: '', email: '', custom_discount_percentage: 0 });
 
   const scannerRef = useRef<HTMLInputElement>(null);
 
@@ -69,6 +71,7 @@ export default function SalesModule({ currentUser, permissions }: SalesModulePro
 
 
   const [loadedOrderId, setLoadedOrderId] = useState<string | null>(null);
+  const [ticketHeader, setTicketHeader] = useState('Gallardo Joyas | Fabricantes de joyería en chapa de oro 14k, creando piezas con diseño, calidad y acabados cuidadosamente elaborados.');
 
   // New POS states
   const [showCashCutModal, setShowCashCutModal] = useState(false);
@@ -221,18 +224,27 @@ export default function SalesModule({ currentUser, permissions }: SalesModulePro
     const { data } = await supabase
       .from('business_rules')
       .select('*')
-      .eq('rule_key', 'wholesale_threshold')
-      .eq('is_active', true)
-      .maybeSingle();
+      .in('rule_key', ['wholesale_threshold', 'ticket_header'])
+      .eq('is_active', true);
 
-    if (data && data.rule_value) {
-      setWholesaleConfig({
-        condition_type: data.rule_value.condition_type || 'amount',
-        threshold: data.rule_value.threshold !== undefined ? data.rule_value.threshold : (data.rule_value.amount || 3000),
-        enable_extra_discount: data.rule_value.enable_extra_discount || false,
-        extra_discount_threshold: data.rule_value.extra_discount_threshold || 5000,
-        extra_discount_percentage: data.rule_value.extra_discount_percentage || 10
-      });
+    if (data) {
+      const wholesaleRule = data.find(r => r.rule_key === 'wholesale_threshold');
+      if (wholesaleRule && wholesaleRule.rule_value) {
+        setWholesaleConfig({
+          condition_type: wholesaleRule.rule_value.condition_type || 'amount',
+          threshold: wholesaleRule.rule_value.threshold !== undefined ? wholesaleRule.rule_value.threshold : (wholesaleRule.rule_value.amount || 3000),
+          enable_extra_discount: wholesaleRule.rule_value.enable_extra_discount || false,
+          extra_discount_threshold: wholesaleRule.rule_value.extra_discount_threshold || 5000,
+          extra_discount_percentage: wholesaleRule.rule_value.extra_discount_percentage || 10,
+          enable_tiers: wholesaleRule.rule_value.enable_tiers ?? true,
+          tiers: wholesaleRule.rule_value.tiers || []
+        });
+      }
+      
+      const ticketRule = data.find(r => r.rule_key === 'ticket_header');
+      if (ticketRule && ticketRule.rule_value) {
+        setTicketHeader(ticketRule.rule_value.text);
+      }
     }
   };
 
@@ -454,7 +466,8 @@ export default function SalesModule({ currentUser, permissions }: SalesModulePro
         email: newCustomerData.email || null,
         credit_limit: 0,
         credit_used: 0,
-        credit_status: 'active'
+        credit_status: 'active',
+        custom_discount_percentage: newCustomerData.custom_discount_percentage > 0 ? newCustomerData.custom_discount_percentage : null
       })
       .select()
       .single();
@@ -463,7 +476,7 @@ export default function SalesModule({ currentUser, permissions }: SalesModulePro
       setCustomers([...customers, data].sort((a, b) => a.name.localeCompare(b.name)));
       setSelectedCustomer(data);
       setShowNewCustomerModal(false);
-      setNewCustomerData({ name: '', phone: '', email: '' });
+      setNewCustomerData({ name: '', phone: '', email: '', custom_discount_percentage: 0 });
     } else {
       alert('Error al crear cliente');
     }
@@ -483,15 +496,49 @@ export default function SalesModule({ currentUser, permissions }: SalesModulePro
     }, 0);
 
     let extraDiscountAmount = 0;
-    if (isWholesale && wholesaleConfig.enable_extra_discount) {
+    let appliedTier: any = null;
+
+    // Determine the base tier from wholesale rules
+    let bestWholesaleTier: any = null;
+    if (wholesaleConfig.enable_tiers && wholesaleConfig.tiers && wholesaleConfig.tiers.length > 0) {
+      const validTiers = wholesaleConfig.tiers.filter((t: any) => {
+        return totalItems >= (t.min_pieces || 0) && subtotalCalc >= (t.min_amount || 0);
+      });
+      if (validTiers.length > 0) {
+        bestWholesaleTier = validTiers.sort((a: any, b: any) => b.discount_percentage - a.discount_percentage)[0];
+      }
+    } else if (isWholesale && wholesaleConfig.enable_extra_discount) {
       const meetsExtra = wholesaleConfig.condition_type === 'pieces'
         ? totalItems >= wholesaleConfig.extra_discount_threshold
         : subtotalCalc >= wholesaleConfig.extra_discount_threshold;
 
       if (meetsExtra) {
-        extraDiscountAmount = subtotalCalc * (wholesaleConfig.extra_discount_percentage / 100);
+        bestWholesaleTier = {
+          name: 'Descuento Extra',
+          discount_percentage: wholesaleConfig.extra_discount_percentage,
+          free_shipping: false
+        };
       }
     }
+
+    const customDiscountPct = selectedCustomer?.custom_discount_percentage || 0;
+    const tierDiscountPct = bestWholesaleTier ? bestWholesaleTier.discount_percentage : 0;
+
+    let finalDiscountPct = 0;
+
+    if (customDiscountPct > tierDiscountPct) {
+      finalDiscountPct = customDiscountPct;
+      appliedTier = {
+        name: 'Descuento Personalizado',
+        discount_percentage: customDiscountPct,
+        free_shipping: bestWholesaleTier?.free_shipping || false
+      };
+    } else if (bestWholesaleTier) {
+      finalDiscountPct = bestWholesaleTier.discount_percentage;
+      appliedTier = bestWholesaleTier;
+    }
+
+    extraDiscountAmount = subtotalCalc * (finalDiscountPct / 100);
 
     const total = subtotalCalc - extraDiscountAmount;
     const changeGiven = amountTendered > total ? amountTendered - total : 0;
@@ -502,7 +549,8 @@ export default function SalesModule({ currentUser, permissions }: SalesModulePro
       extraDiscountAmount,
       total,
       isWholesale,
-      changeGiven
+      changeGiven,
+      appliedTier
     };
   };
 
@@ -945,7 +993,7 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
   <div class="header">
     <div class="store-name">GALLARDO JOYAS</div>
     <div class="store-info">
-      Joyería de Plata Pura y Baño de Oro<br/>
+      ${ticketHeader.replace(/\n/g, '<br/>')}<br/>
       Centro Joyero, Guadalajara, Jalisco<br/>
       Tel: (33) 1234-5678
     </div>
@@ -1315,7 +1363,7 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
   <div class="header">
     <div class="store-name">GALLARDO JOYAS</div>
     <div class="store-info">
-      Joyería de Plata Pura y Baño de Oro<br/>
+      ${ticketHeader.replace(/\n/g, '<br/>')}<br/>
       Centro Joyero, Guadalajara, Jalisco<br/>
       Tel: (33) 1234-5678
     </div>
@@ -1602,7 +1650,10 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
               {wholesaleConfig.condition_type === 'amount'
                 ? `Umbral: $${wholesaleConfig.threshold.toLocaleString('es-MX')} MXN`
                 : `Umbral: ${wholesaleConfig.threshold} Piezas`}
-              {wholesaleConfig.enable_extra_discount && ` + ${wholesaleConfig.extra_discount_percentage}% Extra al superar ${wholesaleConfig.condition_type === 'amount' ? `$${wholesaleConfig.extra_discount_threshold.toLocaleString('es-MX')} MXN` : `${wholesaleConfig.extra_discount_threshold} Piezas`}`}
+              {wholesaleConfig.enable_tiers && wholesaleConfig.tiers && wholesaleConfig.tiers.length > 0
+                ? 'Niveles de Descuento Activos'
+                : (wholesaleConfig.enable_extra_discount && ` + ${wholesaleConfig.extra_discount_percentage}% Extra al superar ${wholesaleConfig.condition_type === 'amount' ? `$${wholesaleConfig.extra_discount_threshold.toLocaleString('es-MX')} MXN` : `${wholesaleConfig.extra_discount_threshold} Piezas`}`)
+              }
               - Los precios se ajustan automáticamente
             </p>
           </div>
@@ -2020,7 +2071,9 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
                         </p>
                         {calculateTotal().extraDiscountAmount > 0 && (
                           <p className="text-sm text-green-700 font-bold mt-1">
-                            ¡+ {wholesaleConfig.extra_discount_percentage}% Descuento Extra Aplicado!
+                            {totals.appliedTier 
+                              ? `¡+ ${totals.appliedTier.discount_percentage}% Descuento Aplicado (${totals.appliedTier.name})! ${totals.appliedTier.free_shipping ? '📦 Envío Gratis!' : ''}`
+                              : `¡+ ${wholesaleConfig.extra_discount_percentage}% Descuento Extra Aplicado!`}
                           </p>
                         )}
                       </div>
@@ -2720,6 +2773,19 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
                   onChange={(e) => setNewCustomerData({ ...newCustomerData, email: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="ejemplo@correo.com"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Descuento Personalizado (%)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={newCustomerData.custom_discount_percentage}
+                  onChange={(e) => setNewCustomerData({ ...newCustomerData, custom_discount_percentage: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Ej. 15"
                 />
               </div>
               <div className="flex space-x-3 pt-4">

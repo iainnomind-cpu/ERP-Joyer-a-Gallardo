@@ -55,6 +55,7 @@ export default function QuotesModule({ currentUser, permissions }: QuotesModuleP
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
+  const [ticketHeader, setTicketHeader] = useState('Gallardo Joyas | Fabricantes de joyería en chapa de oro 14k, creando piezas con diseño, calidad y acabados cuidadosamente elaborados.');
   const printRef = useRef<HTMLDivElement>(null);
 
   const [stats, setStats] = useState({
@@ -108,6 +109,17 @@ export default function QuotesModule({ currentUser, permissions }: QuotesModuleP
 
       setQuotes(quotesWithDetails);
       calculateStats(quotesWithDetails);
+    }
+
+    const { data: ruleData } = await supabase
+      .from('business_rules')
+      .select('*')
+      .eq('rule_key', 'ticket_header')
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (ruleData && ruleData.rule_value) {
+      setTicketHeader(ruleData.rule_value.text);
     }
 
     setLoading(false);
@@ -477,7 +489,7 @@ export default function QuotesModule({ currentUser, permissions }: QuotesModuleP
                       </div>
                       <div>
                         <h1 className="text-2xl font-bold text-gray-900">Gallardo Joyas</h1>
-                        <p className="text-sm text-gray-600">Joyería de Plata Pura y Baño de Oro</p>
+                        <p className="text-sm text-gray-600 whitespace-pre-wrap">{ticketHeader}</p>
                       </div>
                     </div>
                   </div>

@@ -159,6 +159,7 @@ export default function CRMModule({ currentUser, permissions }: CRMModuleProps) 
 
     const creditLimit = parseFloat(formData.get('credit_limit') as string) || 0;
     const creditStatus = creditLimit > 0 ? (formData.get('credit_status') as string) : 'none';
+    const customDiscount = parseFloat(formData.get('custom_discount_percentage') as string) || 0;
 
     const { error } = await supabase
       .from('customers')
@@ -171,7 +172,8 @@ export default function CRMModule({ currentUser, permissions }: CRMModuleProps) 
         credit_limit: creditLimit,
         credit_used: 0,
         credit_status: creditStatus,
-        credit_notes: formData.get('credit_notes') as string || null
+        credit_notes: formData.get('credit_notes') as string || null,
+        custom_discount_percentage: customDiscount > 0 ? customDiscount : null
       });
 
     if (!error) {
@@ -198,6 +200,7 @@ export default function CRMModule({ currentUser, permissions }: CRMModuleProps) 
     const formData = new FormData(e.currentTarget);
     const creditLimit = parseFloat(formData.get('credit_limit') as string) || 0;
     const creditStatus = creditLimit > 0 ? (formData.get('credit_status') as string) : 'none';
+    const customDiscount = parseFloat(formData.get('custom_discount_percentage') as string) || 0;
 
     const { error } = await supabase
       .from('customers')
@@ -210,6 +213,7 @@ export default function CRMModule({ currentUser, permissions }: CRMModuleProps) 
         credit_limit: creditLimit,
         credit_status: creditStatus,
         credit_notes: formData.get('credit_notes') as string || null,
+        custom_discount_percentage: customDiscount > 0 ? customDiscount : null,
         updated_at: new Date().toISOString()
       })
       .eq('id', editingCustomer.id);
@@ -870,6 +874,21 @@ export default function CRMModule({ currentUser, permissions }: CRMModuleProps) 
                 </div>
                 <div className="mt-3">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Descuento Personalizado (%)
+                  </label>
+                  <input
+                    type="number"
+                    name="custom_discount_percentage"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    defaultValue="0"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Dejar en 0 si no tiene acuerdo especial.</p>
+                </div>
+                <div className="mt-3">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Notas de Crédito
                   </label>
                   <textarea
@@ -1034,6 +1053,21 @@ export default function CRMModule({ currentUser, permissions }: CRMModuleProps) 
                         <option value="blocked">Bloqueado</option>
                       </select>
                     </div>
+                  </div>
+                  <div className="mt-3">
+                    <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
+                      Descuento Personalizado (%)
+                    </label>
+                    <input
+                      type="number"
+                      name="custom_discount_percentage"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      defaultValue={editingCustomer.custom_discount_percentage || 0}
+                      className="w-full px-2 sm:px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Dejar en 0 si no tiene acuerdo especial.</p>
                   </div>
                   <div className="mt-3">
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">

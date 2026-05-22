@@ -36,6 +36,7 @@ export type Customer = {
   credit_used: number;
   credit_status: 'none' | 'active' | 'suspended' | 'blocked';
   credit_notes: string | null;
+  custom_discount_percentage?: number;
   created_at: string;
   updated_at: string;
 };
