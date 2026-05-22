@@ -172,19 +172,22 @@ export default function NewQuoteModal({ onClose, onSuccess }: NewQuoteModalProps
     return calculateSubtotal();
   };
 
-  const generateOrderNumber = async () => {
+  const generateOrderNumber = async (): Promise<string> => {
+    // Fetch all order numbers to find the true global maximum numeric value
     const { data } = await supabase
       .from('orders')
-      .select('order_number')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .select('order_number');
 
-    if (data?.order_number) {
-      const lastNumber = parseInt(data.order_number.replace(/\D/g, ''));
-      return `COT-${String(lastNumber + 1).padStart(5, '0')}`;
+    let maxNum = 0;
+    if (data && data.length > 0) {
+      for (const row of data) {
+        const num = parseInt(row.order_number.replace(/\D/g, ''), 10);
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+      }
     }
-    return 'COT-00001';
+
+    // Add a small random offset to reduce collision chance in concurrent scenarios
+    return `COT-${String(maxNum + 1).padStart(5, '0')}`;
   };
 
   const validateForm = () => {
@@ -255,26 +258,45 @@ export default function NewQuoteModal({ onClose, onSuccess }: NewQuoteModalProps
         customerId = customerData.id;
       }
 
-      const orderNumber = await generateOrderNumber();
+      let orderNumber = await generateOrderNumber();
       const subtotal = calculateSubtotal();
       const total = calculateTotal();
 
-      const { data: orderData, error: orderError } = await supabase
-        .from('orders')
-        .insert([{
-          order_number: orderNumber,
-          customer_id: customerId || null,
-          order_type: orderDetails.order_type,
-          status: status,
-          payment_status: 'pending',
-          delivery_method: orderDetails.delivery_method,
-          delivery_address: orderDetails.delivery_method === 'delivery' ? orderDetails.delivery_address.trim() : null,
-          subtotal: subtotal,
-          total: total,
-          notes: orderDetails.notes.trim() || null
-        }])
-        .select()
-        .single();
+      // Retry up to 5 times if we get a duplicate order number conflict
+      let orderData: any = null;
+      let orderError: any = null;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const result = await supabase
+          .from('orders')
+          .insert([{
+            order_number: orderNumber,
+            customer_id: customerId || null,
+            order_type: orderDetails.order_type,
+            status: status,
+            payment_status: 'pending',
+            delivery_method: orderDetails.delivery_method,
+            delivery_address: orderDetails.delivery_method === 'delivery' ? orderDetails.delivery_address.trim() : null,
+            subtotal: subtotal,
+            total: total,
+            notes: orderDetails.notes.trim() || null
+          }])
+          .select()
+          .single();
+
+        orderData = result.data;
+        orderError = result.error;
+
+        if (!orderError) break;
+
+        if (orderError.code === '23505') {
+          // Duplicate number — bump by 1 and retry
+          const num = parseInt(orderNumber.replace(/\D/g, ''), 10);
+          orderNumber = `COT-${String(num + 1).padStart(5, '0')}`;
+        } else {
+          break;
+        }
+      }
+
 
       if (orderError) throw orderError;
 
