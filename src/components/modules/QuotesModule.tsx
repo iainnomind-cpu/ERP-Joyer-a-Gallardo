@@ -400,12 +400,8 @@ export default function QuotesModule({ currentUser, permissions }: QuotesModuleP
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 text-xs rounded-full ${
-                            quote.order_type === 'wholesale'
-                              ? 'bg-blue-100 text-blue-700'
-                              : 'bg-gray-100 text-gray-700'
-                          }`}>
-                            {quote.order_type === 'wholesale' ? 'Mayoreo' : 'Menudeo'}
+                          <span className={`px-2 py-1 text-xs rounded-full ${(quote as any).price_type === 'wholesale' || quote.order_type === 'wholesale' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
+                            {(quote as any).price_type === 'wholesale' || quote.order_type === 'wholesale' ? 'Mayoreo' : 'Menudeo'}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -537,7 +533,7 @@ export default function QuotesModule({ currentUser, permissions }: QuotesModuleP
                       <div className="flex justify-between">
                         <span className="text-gray-600">Tipo:</span>
                         <span className="font-medium text-gray-900">
-                          {selectedQuote.order_type === 'wholesale' ? 'Mayoreo' : 'Menudeo'}
+                          {(selectedQuote as any).price_type === 'wholesale' || selectedQuote.order_type === 'wholesale' ? 'Mayoreo' : 'Menudeo'}
                         </span>
                       </div>
                       <div className="flex justify-between">
@@ -620,7 +616,7 @@ export default function QuotesModule({ currentUser, permissions }: QuotesModuleP
                       ${selectedQuote.subtotal.toLocaleString('es-MX')}
                     </span>
                   </div>
-                  {selectedQuote.order_type === 'wholesale' && (
+                  {((selectedQuote as any).price_type === 'wholesale' || selectedQuote.order_type === 'wholesale') && (
                     <div className="flex justify-between text-sm text-green-600">
                       <span>Descuento Mayoreo:</span>
                       <span className="font-medium">
