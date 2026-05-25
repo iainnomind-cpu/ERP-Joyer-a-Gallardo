@@ -36,7 +36,7 @@ export default function NewQuoteModal({ onClose, onSuccess }: NewQuoteModalProps
   });
 
   const [orderDetails, setOrderDetails] = useState({
-    price_type: 'retail' as 'retail' | 'wholesale',
+    order_type: 'retail' as 'retail' | 'wholesale',
     delivery_method: 'pickup' as 'pickup' | 'delivery',
     delivery_address: '',
     notes: ''
@@ -147,7 +147,7 @@ export default function NewQuoteModal({ onClose, onSuccess }: NewQuoteModalProps
 
   const calculateSubtotal = () => {
     return cart.reduce((sum, item) => {
-      const price = orderDetails.price_type === 'wholesale'
+      const price = orderDetails.order_type === 'wholesale'
         ? item.product.wholesale_price
         : item.product.retail_price;
       return sum + (price * item.quantity);
@@ -155,7 +155,7 @@ export default function NewQuoteModal({ onClose, onSuccess }: NewQuoteModalProps
   };
 
   const calculateDiscount = () => {
-    if (orderDetails.price_type !== 'wholesale') return 0;
+    if (orderDetails.order_type !== 'wholesale') return 0;
 
     const retailTotal = cart.reduce((sum, item) => {
       return sum + (item.product.retail_price * item.quantity);
@@ -271,8 +271,7 @@ export default function NewQuoteModal({ onClose, onSuccess }: NewQuoteModalProps
           .insert([{
             order_number: orderNumber,
             customer_id: customerId || null,
-            order_type: 'cotizacion',
-            price_type: orderDetails.price_type,
+            order_type: orderDetails.order_type,
             status: status,
             payment_status: 'pending',
             delivery_method: orderDetails.delivery_method,
@@ -305,10 +304,10 @@ export default function NewQuoteModal({ onClose, onSuccess }: NewQuoteModalProps
         order_id: orderData.id,
         product_id: item.product.id,
         quantity: item.quantity,
-        unit_price: orderDetails.price_type === 'wholesale'
+        unit_price: orderDetails.order_type === 'wholesale'
           ? item.product.wholesale_price
           : item.product.retail_price,
-        subtotal: (orderDetails.price_type === 'wholesale'
+        subtotal: (orderDetails.order_type === 'wholesale'
           ? item.product.wholesale_price
           : item.product.retail_price) * item.quantity
       }));
@@ -576,8 +575,8 @@ export default function NewQuoteModal({ onClose, onSuccess }: NewQuoteModalProps
                   Tipo de Orden
                 </label>
                 <select
-                  value={orderDetails.price_type}
-                  onChange={(e) => setOrderDetails({ ...orderDetails, price_type: e.target.value as 'retail' | 'wholesale' })}
+                  value={orderDetails.order_type}
+                  onChange={(e) => setOrderDetails({ ...orderDetails, order_type: e.target.value as 'retail' | 'wholesale' })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="retail">Menudeo</option>
@@ -739,7 +738,7 @@ export default function NewQuoteModal({ onClose, onSuccess }: NewQuoteModalProps
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {cart.map(item => {
-                      const unitPrice = orderDetails.price_type === 'wholesale'
+                      const unitPrice = orderDetails.order_type === 'wholesale'
                         ? item.product.wholesale_price
                         : item.product.retail_price;
                       const subtotal = unitPrice * item.quantity;
@@ -835,7 +834,7 @@ export default function NewQuoteModal({ onClose, onSuccess }: NewQuoteModalProps
                     ${calculateSubtotal().toLocaleString('es-MX')}
                   </span>
                 </div>
-                {orderDetails.price_type === 'wholesale' && calculateDiscount() > 0 && (
+                {orderDetails.order_type === 'wholesale' && calculateDiscount() > 0 && (
                   <div className="flex justify-between text-sm text-green-600">
                     <span>Descuento Mayoreo:</span>
                     <span className="font-medium">
