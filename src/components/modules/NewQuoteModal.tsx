@@ -24,6 +24,12 @@ export default function NewQuoteModal({ onClose, onSuccess }: NewQuoteModalProps
   const [productsLoading, setProductsLoading] = useState(false);
   const [error, setError] = useState('');
   const [addedProductId, setAddedProductId] = useState<string | null>(null);
+  const [wholesaleConfig, setWholesaleConfig] = useState({
+    condition_type: 'amount' as 'amount' | 'pieces',
+    threshold: 1500,
+    enable_tiers: true,
+    tiers: [] as any[]
+  });
 
   const [newCustomerForm, setNewCustomerForm] = useState({
     name: '',
@@ -45,6 +51,7 @@ export default function NewQuoteModal({ onClose, onSuccess }: NewQuoteModalProps
   useEffect(() => {
     loadCustomers();
     loadProducts();
+    loadWholesaleConfig();
   }, []);
 
   useEffect(() => {
@@ -75,6 +82,25 @@ export default function NewQuoteModal({ onClose, onSuccess }: NewQuoteModalProps
     }
 
     setProductsLoading(false);
+  };
+
+  const loadWholesaleConfig = async () => {
+    const { data } = await supabase
+      .from('business_rules')
+      .select('rule_value')
+      .eq('rule_key', 'wholesale_threshold')
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (data?.rule_value) {
+      const rv = data.rule_value;
+      setWholesaleConfig({
+        condition_type: rv.condition_type || 'amount',
+        threshold: rv.threshold ?? 1500,
+        enable_tiers: rv.enable_tiers ?? true,
+        tiers: rv.tiers || []
+      });
+    }
   };
 
   const filterProducts = () => {
@@ -145,32 +171,60 @@ export default function NewQuoteModal({ onClose, onSuccess }: NewQuoteModalProps
     setCart(cart.filter(item => item.product.id !== productId));
   };
 
-  const calculateSubtotal = () => {
-    return cart.reduce((sum, item) => {
-      const price = orderDetails.order_type === 'wholesale'
-        ? item.product.wholesale_price
-        : item.product.retail_price;
+  // ── Discount calculation (mirrors SalesModule logic) ──────────────────────
+  const calculateTotals = () => {
+    const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+    const retailSubtotal = cart.reduce((sum, item) => sum + (item.product.retail_price * item.quantity), 0);
+
+    // Determine if wholesale threshold is met (auto-detection)
+    const isWholesale = wholesaleConfig.condition_type === 'pieces'
+      ? totalItems >= wholesaleConfig.threshold
+      : retailSubtotal >= wholesaleConfig.threshold;
+
+    // Use wholesale or retail prices as base
+    const useWholesalePrices = orderDetails.order_type === 'wholesale' || isWholesale;
+    const subtotalCalc = cart.reduce((sum, item) => {
+      const price = useWholesalePrices ? item.product.wholesale_price : item.product.retail_price;
       return sum + (price * item.quantity);
     }, 0);
+
+    // Find best tier discount
+    let bestWholesaleTier: any = null;
+    if (isWholesale && wholesaleConfig.enable_tiers && wholesaleConfig.tiers.length > 0) {
+      const validTiers = wholesaleConfig.tiers.filter((t: any) =>
+        totalItems >= (t.min_pieces || 0) && subtotalCalc >= (t.min_amount || 0)
+      );
+      if (validTiers.length > 0) {
+        bestWholesaleTier = validTiers.sort((a: any, b: any) => b.discount_percentage - a.discount_percentage)[0];
+      }
+    }
+
+    // Compare tier discount vs. customer custom discount — take the higher
+    const selectedCustomer = customers.find(c => c.id === selectedCustomerId);
+    const customDiscountPct = selectedCustomer?.custom_discount_percentage || 0;
+    const tierDiscountPct = bestWholesaleTier ? bestWholesaleTier.discount_percentage : 0;
+
+    let appliedTier: any = null;
+    let finalDiscountPct = 0;
+
+    if (customDiscountPct > tierDiscountPct) {
+      finalDiscountPct = customDiscountPct;
+      appliedTier = { name: 'Descuento Personalizado', discount_percentage: customDiscountPct, free_shipping: bestWholesaleTier?.free_shipping || false };
+    } else if (bestWholesaleTier) {
+      finalDiscountPct = bestWholesaleTier.discount_percentage;
+      appliedTier = bestWholesaleTier;
+    }
+
+    const discountAmount = subtotalCalc * (finalDiscountPct / 100);
+    const total = subtotalCalc - discountAmount;
+
+    return { retailSubtotal, subtotalCalc, discountAmount, total, isWholesale: useWholesalePrices, appliedTier };
   };
 
-  const calculateDiscount = () => {
-    if (orderDetails.order_type !== 'wholesale') return 0;
-
-    const retailTotal = cart.reduce((sum, item) => {
-      return sum + (item.product.retail_price * item.quantity);
-    }, 0);
-
-    const wholesaleTotal = cart.reduce((sum, item) => {
-      return sum + (item.product.wholesale_price * item.quantity);
-    }, 0);
-
-    return retailTotal - wholesaleTotal;
-  };
-
-  const calculateTotal = () => {
-    return calculateSubtotal();
-  };
+  // Legacy helpers kept for compatibility
+  const calculateSubtotal = () => calculateTotals().subtotalCalc;
+  const calculateDiscount = () => calculateTotals().discountAmount;
+  const calculateTotal = () => calculateTotals().total;
 
   const generateOrderNumber = async (): Promise<string> => {
     // Fetch all order numbers to find the true global maximum numeric value
@@ -259,8 +313,7 @@ export default function NewQuoteModal({ onClose, onSuccess }: NewQuoteModalProps
       }
 
       let orderNumber = await generateOrderNumber();
-      const subtotal = calculateSubtotal();
-      const total = calculateTotal();
+      const { subtotalCalc: subtotal, total, isWholesale } = calculateTotals();
 
       // Retry up to 5 times if we get a duplicate order number conflict
       let orderData: any = null;
@@ -304,10 +357,10 @@ export default function NewQuoteModal({ onClose, onSuccess }: NewQuoteModalProps
         order_id: orderData.id,
         product_id: item.product.id,
         quantity: item.quantity,
-        unit_price: orderDetails.order_type === 'wholesale'
+        unit_price: isWholesale
           ? item.product.wholesale_price
           : item.product.retail_price,
-        subtotal: (orderDetails.order_type === 'wholesale'
+        subtotal: (isWholesale
           ? item.product.wholesale_price
           : item.product.retail_price) * item.quantity
       }));
@@ -825,32 +878,46 @@ export default function NewQuoteModal({ onClose, onSuccess }: NewQuoteModalProps
             />
           </div>
 
-          {cart.length > 0 && (
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="space-y-2 max-w-md ml-auto">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Subtotal:</span>
-                  <span className="font-medium text-gray-900">
-                    ${calculateSubtotal().toLocaleString('es-MX')}
-                  </span>
-                </div>
-                {orderDetails.order_type === 'wholesale' && calculateDiscount() > 0 && (
-                  <div className="flex justify-between text-sm text-green-600">
-                    <span>Descuento Mayoreo:</span>
-                    <span className="font-medium">
-                      -${calculateDiscount().toLocaleString('es-MX')}
-                    </span>
+          {cart.length > 0 && (() => {
+            const t = calculateTotals();
+            return (
+              <div className="bg-gray-50 rounded-lg p-4">
+                {t.isWholesale && (
+                  <div className="mb-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-xs font-semibold text-blue-700">⚡ Precios de Mayoreo Aplicados</p>
+                    {t.appliedTier && (
+                      <p className="text-xs text-green-700 font-bold mt-0.5">
+                        ✅ {t.appliedTier.discount_percentage}% Descuento — {t.appliedTier.name}
+                        {t.appliedTier.free_shipping ? ' 📦 Envío Gratis' : ''}
+                      </p>
+                    )}
                   </div>
                 )}
-                <div className="flex justify-between text-lg font-bold border-t border-gray-300 pt-2">
-                  <span className="text-gray-900">Total:</span>
-                  <span className="text-amber-600">
-                    ${calculateTotal().toLocaleString('es-MX')} MXN
-                  </span>
+                <div className="space-y-2 max-w-md ml-auto">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Subtotal (precio base):</span>
+                    <span className="font-medium text-gray-900">
+                      ${t.subtotalCalc.toLocaleString('es-MX')}
+                    </span>
+                  </div>
+                  {t.discountAmount > 0 && (
+                    <div className="flex justify-between text-sm text-green-600">
+                      <span>Descuento aplicado ({t.appliedTier?.discount_percentage}%):</span>
+                      <span className="font-medium">
+                        -${t.discountAmount.toLocaleString('es-MX')}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-lg font-bold border-t border-gray-300 pt-2">
+                    <span className="text-gray-900">Total:</span>
+                    <span className="text-amber-600">
+                      ${t.total.toLocaleString('es-MX')} MXN
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
 
         <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 rounded-b-lg flex gap-3">

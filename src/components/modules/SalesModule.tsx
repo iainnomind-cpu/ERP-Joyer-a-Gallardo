@@ -1463,7 +1463,8 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
     `;
   };
 
-  const { subtotal, total, isWholesale, changeGiven } = calculateTotal();
+  const totals = calculateTotal();
+  const { subtotal, total, isWholesale, changeGiven } = totals;
 
   const stats = {
     totalOrders: orders.length,
@@ -2069,7 +2070,7 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
                             ? `Se logró la meta de $${wholesaleConfig.threshold.toLocaleString('es-MX')}`
                             : `Se logró la meta de ${wholesaleConfig.threshold} Piezas`}
                         </p>
-                        {calculateTotal().extraDiscountAmount > 0 && (
+                        {totals.extraDiscountAmount > 0 && (
                           <p className="text-sm text-green-700 font-bold mt-1">
                             {totals.appliedTier 
                               ? `¡+ ${totals.appliedTier.discount_percentage}% Descuento Aplicado (${totals.appliedTier.name})! ${totals.appliedTier.free_shipping ? '📦 Envío Gratis!' : ''}`
@@ -2082,11 +2083,11 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
                     <div className="border-t border-gray-200 pt-4 space-y-2">
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">Subtotal:</span>
-                        <span className="text-gray-900">${calculateTotal().subtotal.toLocaleString('es-MX')}</span>
+                        <span className="text-gray-900">${totals.subtotal.toLocaleString('es-MX')}</span>
                       </div>
                       <div className="flex justify-between text-lg font-bold">
                         <span className="text-gray-900">Total:</span>
-                        <span className="text-amber-600">${calculateTotal().total.toLocaleString('es-MX')}</span>
+                        <span className="text-amber-600">${totals.total.toLocaleString('es-MX')}</span>
                       </div>
                     </div>
 
