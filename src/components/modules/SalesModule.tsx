@@ -502,7 +502,7 @@ export default function SalesModule({ currentUser, permissions }: SalesModulePro
     let bestWholesaleTier: any = null;
     if (wholesaleConfig.enable_tiers && wholesaleConfig.tiers && wholesaleConfig.tiers.length > 0) {
       const validTiers = wholesaleConfig.tiers.filter((t: any) => {
-        return totalItems >= (t.min_pieces || 0) && subtotalCalc >= (t.min_amount || 0);
+        return totalItems >= (t.min_pieces || 0) && retailSubtotal >= (t.min_amount || 0);
       });
       if (validTiers.length > 0) {
         bestWholesaleTier = validTiers.sort((a: any, b: any) => b.discount_percentage - a.discount_percentage)[0];
@@ -510,7 +510,7 @@ export default function SalesModule({ currentUser, permissions }: SalesModulePro
     } else if (isWholesale && wholesaleConfig.enable_extra_discount) {
       const meetsExtra = wholesaleConfig.condition_type === 'pieces'
         ? totalItems >= wholesaleConfig.extra_discount_threshold
-        : subtotalCalc >= wholesaleConfig.extra_discount_threshold;
+        : retailSubtotal >= wholesaleConfig.extra_discount_threshold;
 
       if (meetsExtra) {
         bestWholesaleTier = {
@@ -1396,8 +1396,8 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
       <div class="item">
         <div class="item-name">${item.product.name}</div>
         <div class="item-details">
-          <span>${item.quantity} x $${(isWholesale ? item.product.wholesale_price : item.product.retail_price).toFixed(2)}</span>
-          <span>$${((isWholesale ? item.product.wholesale_price : item.product.retail_price) * item.quantity).toFixed(2)}</span>
+          <span>${item.quantity} x $${item.product.retail_price.toFixed(2)}</span>
+          <span>$${(item.product.retail_price * item.quantity).toFixed(2)}</span>
         </div>
       </div>
     `).join('')}
@@ -1408,9 +1408,9 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
       <span>Subtotal:</span>
       <span>$${order.subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
     </div>
-    ${isWholesale ? `
+    ${order.subtotal > order.total ? `
     <div class="total-line">
-      <span>Descuento Mayoreo:</span>
+      <span>Descuento:</span>
       <span>-$${(order.subtotal - order.total).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
     </div>
     ` : ''}

@@ -207,7 +207,7 @@ export default function InventoryModule({ currentUser, permissions }: InventoryM
         material: material,
         category: formData.get('category') as string,
         retail_price: parseFloat(formData.get('retail_price') as string),
-        wholesale_price: parseFloat(formData.get('wholesale_price') as string),
+        wholesale_price: parseFloat(formData.get('retail_price') as string) * 0.5,
         stock_a: stockA,
         stock_b: stockB,
         stock_c: stockC,
@@ -303,7 +303,7 @@ export default function InventoryModule({ currentUser, permissions }: InventoryM
         material: formData.get('material') as string,
         category: formData.get('category') as string,
         retail_price: parseFloat(formData.get('retail_price') as string),
-        wholesale_price: parseFloat(formData.get('wholesale_price') as string),
+        wholesale_price: parseFloat(formData.get('retail_price') as string) * 0.5,
         stock_a: stockA,
         stock_b: stockB,
         stock_c: stockC,
@@ -1194,27 +1194,15 @@ export default function InventoryModule({ currentUser, permissions }: InventoryM
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                <div>
-                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Precio Menudeo</label>
-                  <input
-                    type="number"
-                    name="retail_price"
-                    step="0.01"
-                    required
-                    className="w-full px-2 sm:px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Precio Mayoreo</label>
-                  <input
-                    type="number"
-                    name="wholesale_price"
-                    step="0.01"
-                    required
-                    className="w-full px-2 sm:px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                  />
-                </div>
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Precio Menudeo</label>
+                <input
+                  type="number"
+                  name="retail_price"
+                  step="0.01"
+                  required
+                  className="w-full px-2 sm:px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                />
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
@@ -1404,29 +1392,16 @@ export default function InventoryModule({ currentUser, permissions }: InventoryM
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                <div>
-                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Precio Menudeo</label>
-                  <input
-                    type="number"
-                    name="retail_price"
-                    step="0.01"
-                    required
-                    defaultValue={editingFullProduct.retail_price}
-                    className="w-full px-2 sm:px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Precio Mayoreo</label>
-                  <input
-                    type="number"
-                    name="wholesale_price"
-                    step="0.01"
-                    required
-                    defaultValue={editingFullProduct.wholesale_price}
-                    className="w-full px-2 sm:px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Precio Menudeo</label>
+                <input
+                  type="number"
+                  name="retail_price"
+                  step="0.01"
+                  required
+                  defaultValue={editingFullProduct.retail_price}
+                  className="w-full px-2 sm:px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 md:gap-4">

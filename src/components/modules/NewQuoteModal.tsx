@@ -192,7 +192,7 @@ export default function NewQuoteModal({ onClose, onSuccess }: NewQuoteModalProps
     let bestWholesaleTier: any = null;
     if (isWholesale && wholesaleConfig.enable_tiers && wholesaleConfig.tiers.length > 0) {
       const validTiers = wholesaleConfig.tiers.filter((t: any) =>
-        totalItems >= (t.min_pieces || 0) && subtotalCalc >= (t.min_amount || 0)
+        totalItems >= (t.min_pieces || 0) && retailSubtotal >= (t.min_amount || 0)
       );
       if (validTiers.length > 0) {
         bestWholesaleTier = validTiers.sort((a: any, b: any) => b.discount_percentage - a.discount_percentage)[0];
