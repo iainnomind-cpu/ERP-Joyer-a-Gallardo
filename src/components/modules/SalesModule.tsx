@@ -1026,8 +1026,8 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
       <div class="item">
         <div class="item-name">${item.product.name}</div>
         <div class="item-details">
-          <span>${item.quantity} x $${(isWholesale ? item.product.wholesale_price : item.product.retail_price).toFixed(2)}</span>
-          <span>$${((isWholesale ? item.product.wholesale_price : item.product.retail_price) * item.quantity).toFixed(2)}</span>
+          <span>${item.quantity} x $${item.product.retail_price.toFixed(2)}</span>
+          <span>$${(item.product.retail_price * item.quantity).toFixed(2)}</span>
         </div>
       </div>
     `).join('')}
@@ -1038,9 +1038,9 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
       <span>Subtotal:</span>
       <span>$${subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
     </div>
-    ${isWholesale ? `
+    ${subtotal > total ? `
     <div class="total-line">
-      <span>Descuento Mayoreo:</span>
+      <span>Descuento:</span>
       <span>-$${(subtotal - total).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
     </div>
     ` : ''}
