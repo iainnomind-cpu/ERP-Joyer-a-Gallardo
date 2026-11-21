@@ -1,19 +1,21 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Layout from './components/Layout';
 import LoginModule from './components/modules/LoginModule';
+import ErrorBoundary from './components/ErrorBoundary';
+import { lazyWithRetry } from './lib/lazyWithRetry';
 import { PermissionsMap, getDefaultPermissions, mergePermissions, loadUserPermissions, getModulePermissions } from './lib/permissions';
 
 // Lazy-loaded modules — each becomes its own chunk
-const Dashboard = lazy(() => import('./components/modules/Dashboard'));
-const CRMModule = lazy(() => import('./components/modules/CRMModule'));
-const KanbanModule = lazy(() => import('./components/modules/KanbanModule'));
-const InventoryModule = lazy(() => import('./components/modules/InventoryModule'));
-const SalesModule = lazy(() => import('./components/modules/SalesModule'));
-const QuotesModule = lazy(() => import('./components/modules/QuotesModule'));
-const ConfigModule = lazy(() => import('./components/modules/ConfigModule'));
-const MarketingModule = lazy(() => import('./components/modules/MarketingModule'));
-const EcommerceDashboard = lazy(() => import('./pages/EcommerceDashboard').then(m => ({ default: m.EcommerceDashboard })));
-const InboxModule = lazy(() => import('./components/modules/InboxModule'));
+const Dashboard = lazyWithRetry(() => import('./components/modules/Dashboard'), 'Dashboard');
+const CRMModule = lazyWithRetry(() => import('./components/modules/CRMModule'), 'CRM');
+const KanbanModule = lazyWithRetry(() => import('./components/modules/KanbanModule'), 'Pipeline');
+const InventoryModule = lazyWithRetry(() => import('./components/modules/InventoryModule'), 'Inventario');
+const SalesModule = lazyWithRetry(() => import('./components/modules/SalesModule'), 'Ventas');
+const QuotesModule = lazyWithRetry(() => import('./components/modules/QuotesModule'), 'Cotizaciones');
+const ConfigModule = lazyWithRetry(() => import('./components/modules/ConfigModule'), 'Configuración');
+const MarketingModule = lazyWithRetry(() => import('./components/modules/MarketingModule'), 'Marketing');
+const EcommerceDashboard = lazyWithRetry(() => import('./pages/EcommerceDashboard').then(m => ({ default: m.EcommerceDashboard })), 'E-commerce');
+const InboxModule = lazyWithRetry(() => import('./components/modules/InboxModule'), 'Bandeja de Entrada');
 
 interface CurrentUser {
   id: string;
@@ -105,6 +107,7 @@ function App() {
         onLogout={handleLogout}
         permissions={userPermissions}
       >
+        <ErrorBoundary label={`el módulo ${currentModule}`} resetKey={currentModule}>
         <Suspense fallback={<ModuleLoader />}>
           {currentModule === 'dashboard' && <Dashboard currentUser={currentUser} />}
           {currentModule === 'crm' && <CRMModule currentUser={currentUser} permissions={getModulePermissions(userPermissions, 'crm')} />}
@@ -117,6 +120,7 @@ function App() {
           {currentModule === 'inbox' && <InboxModule currentUser={currentUser} />}
           {currentModule === 'config' && <ConfigModule currentUser={currentUser} />}
         </Suspense>
+        </ErrorBoundary>
       </Layout>
     </>
   );
