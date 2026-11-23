@@ -19,6 +19,7 @@ export type User = {
   password_hash: string;
   created_at: string;
   updated_at: string;
+  assigned_terminal_id?: string | null;
 };
 
 export type Customer = {

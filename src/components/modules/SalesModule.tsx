@@ -22,6 +22,7 @@ interface CurrentUser {
   email?: string;
   role: 'admin' | 'vendedor' | 'cajero';
   is_active: boolean;
+  assigned_terminal_id?: string | null;
 }
 
 interface SalesModuleProps {
@@ -269,6 +270,27 @@ export default function SalesModule({ currentUser, permissions }: SalesModulePro
 
     if (data) {
       setTerminals(data);
+      // Auto-select terminal for cajero based on assigned_terminal_id
+      if (currentUser?.role === 'cajero') {
+        let terminalId = currentUser?.assigned_terminal_id;
+        if (!terminalId && currentUser?.id) {
+          const { data: userRow } = await supabase
+            .from('users')
+            .select('assigned_terminal_id')
+            .eq('id', currentUser.id)
+            .single();
+          if (userRow?.assigned_terminal_id) {
+            terminalId = userRow.assigned_terminal_id;
+          }
+        }
+        if (terminalId) {
+          const assigned = data.find(t => t.id === terminalId);
+          if (assigned) setSelectedTerminal(assigned);
+        } else if (data.length > 0) {
+          // If no specific terminal was assigned in DB, default to first active terminal
+          setSelectedTerminal(data[0]);
+        }
+      }
     }
   };
 
@@ -2278,6 +2300,30 @@ ${selectedPaymentMethod === 'credit' ? `Crédito Restante: $${(selectedCustomer!
                       </div>
                     </div>
                   </div>
+                ) : currentUser?.role === 'cajero' ? (
+                  selectedTerminal ? (
+                    <div className="flex items-center space-x-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                      <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-700">
+                        <Monitor className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">{selectedTerminal.terminal_name}</p>
+                        <p className="text-xs text-gray-500">{selectedTerminal.location} ({selectedTerminal.terminal_number})</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                      <div className="flex items-start space-x-2">
+                        <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
+                        <div>
+                          <p className="text-sm text-amber-800 font-medium">Terminal no asignada</p>
+                          <p className="text-xs text-amber-700 mt-1">
+                            Tu usuario de cajero no tiene una terminal asignada o la terminal no está activa. Contacta al administrador para que te asigne una caja en el módulo de Configuración.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )
                 ) : (
                   <select
                     value={selectedTerminal?.id || ''}

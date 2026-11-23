@@ -22,6 +22,7 @@ interface CurrentUser {
   email?: string;
   role: 'admin' | 'vendedor' | 'cajero';
   is_active: boolean;
+  assigned_terminal_id?: string | null;
 }
 
 function App() {
@@ -56,6 +57,28 @@ function App() {
       try {
         const user = JSON.parse(stored);
         setCurrentUser(user);
+        // Refresh assigned_terminal_id from database in background to avoid stale localStorage
+        if (user?.id) {
+          import('./lib/supabase').then(({ supabase }) => {
+            supabase
+              .from('users')
+              .select('assigned_terminal_id, role, is_active')
+              .eq('id', user.id)
+              .single()
+              .then(({ data }) => {
+                if (data) {
+                  const updatedUser = {
+                    ...user,
+                    role: data.role || user.role,
+                    is_active: data.is_active ?? user.is_active,
+                    assigned_terminal_id: data.assigned_terminal_id || null
+                  };
+                  localStorage.setItem('current_user', JSON.stringify(updatedUser));
+                  setCurrentUser(updatedUser);
+                }
+              });
+          });
+        }
       } catch {
         localStorage.removeItem('current_user');
       }
