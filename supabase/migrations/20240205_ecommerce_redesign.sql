@@ -42,10 +42,12 @@ CREATE TABLE IF NOT EXISTS public.product_categories_rel (
 
 -- 4. Enable RLS for new tables
 ALTER TABLE public.product_images ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Public read access images" ON public.product_images FOR SELECT USING (true);
+-- En lugar de solo CREATE POLICY, pon siempre esto antes:
+DROP POLICY IF EXISTS "Authenticated write access images" ON public.product_images;
 CREATE POLICY "Authenticated write access images" ON public.product_images FOR ALL USING (auth.role() = 'authenticated');
 
 ALTER TABLE public.product_categories_rel ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public read access prod_cat" ON public.product_categories_rel;
 CREATE POLICY "Public read access prod_cat" ON public.product_categories_rel FOR SELECT USING (true);
 CREATE POLICY "Authenticated write access prod_cat" ON public.product_categories_rel FOR ALL USING (auth.role() = 'authenticated');
 

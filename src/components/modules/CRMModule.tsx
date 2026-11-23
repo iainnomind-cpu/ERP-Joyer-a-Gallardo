@@ -52,6 +52,8 @@ export default function CRMModule({ currentUser, permissions }: CRMModuleProps) 
   });
 
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [availableMaterials, setAvailableMaterials] = useState<string[]>(['Plata Pura', 'Baño de Oro', 'Oro', 'Plata']);
+  const [selectedMaterials, setSelectedMaterials] = useState<string[]>([]);
 
   const [creditOperation, setCreditOperation] = useState({
     type: 'charge' as 'charge' | 'payment' | 'adjustment' | 'limit_change',
@@ -167,7 +169,7 @@ export default function CRMModule({ currentUser, permissions }: CRMModuleProps) 
         name: formData.get('name') as string,
         phone: formData.get('phone') as string,
         source: formData.get('source') as string,
-        material_preference: formData.get('material_preference') as string,
+        material_preference: selectedMaterials.length > 0 ? selectedMaterials.join(', ') : 'Ambos',
         preferred_category: formData.get('preferred_category') as string || null,
         credit_limit: creditLimit,
         credit_used: 0,
@@ -178,6 +180,7 @@ export default function CRMModule({ currentUser, permissions }: CRMModuleProps) 
 
     if (!error) {
       setShowAddModal(false);
+      setSelectedMaterials([]);
       loadCustomers();
       loadCreditStats();
       e.currentTarget.reset();
@@ -381,15 +384,6 @@ export default function CRMModule({ currentUser, permissions }: CRMModuleProps) 
           <h2 className="text-2xl font-bold text-gray-900">Módulo CRM</h2>
           <p className="text-gray-600 mt-1">Gestión centralizada de clientes, relaciones y líneas de crédito</p>
         </div>
-        {canCreate && (
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center space-x-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>Nuevo Cliente</span>
-          </button>
-        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -526,8 +520,8 @@ export default function CRMModule({ currentUser, permissions }: CRMModuleProps) 
 
       {crmTab === 'clientes' ? (
         <div className="bg-white rounded-lg border border-gray-200">
-        <div className="p-4 border-b border-gray-200">
-          <div className="relative">
+        <div className="p-4 border-b border-gray-200 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+          <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
               type="text"
@@ -537,6 +531,15 @@ export default function CRMModule({ currentUser, permissions }: CRMModuleProps) 
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
             />
           </div>
+          {(canCreate || currentUser?.role === 'cajero') && (
+            <button
+              onClick={() => { setSelectedMaterials([]); setShowAddModal(true); }}
+              className="flex items-center justify-center space-x-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors shadow-sm whitespace-nowrap"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Nuevo Cliente</span>
+            </button>
+          )}
         </div>
 
         <div className="overflow-x-auto">
@@ -809,18 +812,46 @@ export default function CRMModule({ currentUser, permissions }: CRMModuleProps) 
                     <option value="manual">Manual</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Preferencia de Material
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Preferencias de Material (opción múltiple)
                   </label>
-                  <select
-                    name="material_preference"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                  >
-                    <option value="Ambos">Ambos</option>
-                    <option value="Plata Pura">Plata Pura</option>
-                    <option value="Baño de Oro">Baño de Oro</option>
-                  </select>
+                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg space-y-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {availableMaterials.map((mat) => {
+                        const isChecked = selectedMaterials.includes(mat);
+                        return (
+                          <label
+                            key={mat}
+                            className={`flex items-center space-x-2 p-2 rounded-md border text-sm cursor-pointer transition-all ${
+                              isChecked
+                                ? 'bg-amber-50 border-amber-400 text-amber-900 font-medium shadow-sm'
+                                : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-100'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedMaterials([...selectedMaterials, mat]);
+                                } else {
+                                  setSelectedMaterials(selectedMaterials.filter(m => m !== mat));
+                                }
+                              }}
+                              className="w-4 h-4 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+                            />
+                            <span className="truncate">{mat}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    {selectedMaterials.length === 0 && (
+                      <p className="text-xs text-gray-500 italic">
+                        * Si no selecciona ninguna preferencia, se registrará como "Ambos".
+                      </p>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -903,7 +934,7 @@ export default function CRMModule({ currentUser, permissions }: CRMModuleProps) 
               <div className="flex space-x-3 pt-4">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => { setShowAddModal(false); setSelectedMaterials([]); }}
                   className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
                 >
                   Cancelar

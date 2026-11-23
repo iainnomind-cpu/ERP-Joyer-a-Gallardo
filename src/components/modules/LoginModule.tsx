@@ -60,13 +60,21 @@ export default function LoginModule({ onLoginSuccess }: LoginModuleProps) {
 
       const userData = data[0];
 
+      // Fetch assigned terminal id for the user (if any)
+      const { data: terminalData, error: termError } = await supabase
+        .from('users')
+        .select('assigned_terminal_id')
+        .eq('id', userData.id)
+        .single();
+
       const currentUser: CurrentUser = {
         id: userData.id,
         username: userData.username,
         full_name: userData.full_name,
         email: userData.email || undefined,
         role: userData.role as CurrentUser['role'],
-        is_active: userData.is_active
+        is_active: userData.is_active,
+        assigned_terminal_id: termError ? null : terminalData?.assigned_terminal_id || null
       };
 
       localStorage.setItem('current_user', JSON.stringify(currentUser));

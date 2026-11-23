@@ -66,7 +66,7 @@ const DEFAULT_PERMISSIONS: Record<RoleId, PermissionsMap> = {
   },
   cajero: {
     dashboard: VIEW_ONLY,
-    crm: VIEW_ONLY,
+    crm: VIEW_CREATE,
     inventory: VIEW_ONLY,
     sales: VIEW_CREATE,
     quotes: VIEW_CREATE,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase, BusinessRule, User } from '../../lib/supabase';
+import { supabase, BusinessRule, User, POSTerminal } from '../../lib/supabase';
 import { Settings, DollarSign, AlertCircle, Save, Edit2, X, Users, Plus, Check, Shield, Trash2, FileText } from 'lucide-react';
 import { PermissionsMap, ModulePermissions, getDefaultPermissions, ALL_MODULES, MODULE_LABELS, RoleId } from '../../lib/permissions';
 
@@ -10,6 +10,7 @@ interface CurrentUser {
   email?: string;
   role: 'admin' | 'vendedor' | 'cajero';
   is_active: boolean;
+  assigned_terminal_id?: string | null;
 }
 
 interface ConfigModuleProps {
@@ -21,6 +22,7 @@ export default function ConfigModule({ currentUser }: ConfigModuleProps) {
   const [editingRule, setEditingRule] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<User[]>([]);
+  const [terminals, setTerminals] = useState<POSTerminal[]>([]);
   const [showUserModal, setShowUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [userForm, setUserForm] = useState({
@@ -29,12 +31,14 @@ export default function ConfigModule({ currentUser }: ConfigModuleProps) {
     email: '',
     password: '',
     role: 'vendedor' as 'admin' | 'vendedor' | 'cajero',
-    is_active: true
+    is_active: true,
+    assigned_terminal_id: '' as string
   });
 
   useEffect(() => {
     loadBusinessRules();
     loadUsers();
+    loadTerminals();
   }, []);
 
   const loadBusinessRules = async () => {
@@ -66,6 +70,15 @@ export default function ConfigModule({ currentUser }: ConfigModuleProps) {
       .select('*')
       .order('created_at', { ascending: false });
     if (data) setUsers(data);
+  };
+
+  const loadTerminals = async () => {
+    const { data } = await supabase
+      .from('pos_terminals')
+      .select('*')
+      .eq('is_active', true)
+      .order('terminal_number', { ascending: true });
+    if (data) setTerminals(data);
   };
 
   const handleUpdateRule = async (ruleId: string, newValue: any) => {
@@ -106,6 +119,7 @@ export default function ConfigModule({ currentUser }: ConfigModuleProps) {
         email: userForm.email || null,
         role: userForm.role,
         is_active: userForm.is_active,
+        assigned_terminal_id: userForm.role === 'cajero' && userForm.assigned_terminal_id ? userForm.assigned_terminal_id : null,
         updated_at: new Date().toISOString()
       };
 
@@ -132,7 +146,8 @@ export default function ConfigModule({ currentUser }: ConfigModuleProps) {
           email: userForm.email || null,
           password_hash: userForm.password,
           role: userForm.role,
-          is_active: userForm.is_active
+          is_active: userForm.is_active,
+          assigned_terminal_id: userForm.role === 'cajero' && userForm.assigned_terminal_id ? userForm.assigned_terminal_id : null
         });
 
       if (error) {
@@ -617,6 +632,7 @@ export default function ConfigModule({ currentUser }: ConfigModuleProps) {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre Completo</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rol</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Terminal Asignada</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
               </tr>
@@ -649,6 +665,14 @@ export default function ConfigModule({ currentUser }: ConfigModuleProps) {
                         user.role === 'vendedor' ? 'Vendedor' : 'Cajero'}
                     </span>
                   </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                    {user.role === 'cajero' ? (
+                      terminals.find(t => t.id === user.assigned_terminal_id)?.terminal_name || 
+                      (user.assigned_terminal_id ? 'Asignada' : <span className="text-gray-400 italic">Sin asignar</span>)
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <span className={`px-3 py-1 text-xs font-medium rounded-full ${user.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
                       }`}>
@@ -666,7 +690,8 @@ export default function ConfigModule({ currentUser }: ConfigModuleProps) {
                             email: user.email || '',
                             password: '',
                             role: user.role,
-                            is_active: user.is_active
+                            is_active: user.is_active,
+                            assigned_terminal_id: user.assigned_terminal_id || ''
                           });
                           setShowUserModal(true);
                         }}
@@ -885,6 +910,29 @@ export default function ConfigModule({ currentUser }: ConfigModuleProps) {
                   </p>
                 )}
               </div>
+
+              {userForm.role === 'cajero' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Terminal Asignada (Caja)
+                  </label>
+                  <select
+                    value={userForm.assigned_terminal_id}
+                    onChange={(e) => setUserForm({ ...userForm, assigned_terminal_id: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Seleccione una terminal</option>
+                    {terminals.map((terminal) => (
+                      <option key={terminal.id} value={terminal.id}>
+                        {terminal.terminal_name} - {terminal.location} ({terminal.terminal_number})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Esta terminal se seleccionará automáticamente cuando el cajero abra caja.
+                  </p>
+                </div>
+              )}
 
               <div className="flex items-center">
                 <input
